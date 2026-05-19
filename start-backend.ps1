@@ -33,6 +33,11 @@ if (-not (Test-Path "node_modules")) {
     Write-Host ""
 }
 
+# Создание демо-данных (если нужны)
+Write-Host "📝 Проверка демо-данных..." -ForegroundColor Yellow
+node setup-demo-data.js
+Write-Host ""
+
 # Запуск сервера
 Write-Host "🔥 Запуск backend сервера..." -ForegroundColor Green
 Write-Host "Доступные endpoints: http://localhost:3000/health`n" -ForegroundColor Cyan

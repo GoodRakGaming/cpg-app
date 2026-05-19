@@ -46,16 +46,45 @@ Write-Host "`n🚀 Запуск серверов...`n" -ForegroundColor Green
 # Запуск Backend в новом окне
 Write-Host "1️⃣  Запуск Backend (порт 3000)..." -ForegroundColor Cyan
 Start-Process powershell.exe -ArgumentList "-NoExit -Command cd '$ProjectRoot'; & '.\start-backend.ps1'"
-Start-Sleep -Seconds 2
 
-# Запуск Frontend в новом окне
-Write-Host "2️⃣  Запуск Frontend (порт 3001)..." -ForegroundColor Cyan
-Start-Process powershell.exe -ArgumentList "-NoExit -Command cd '$ProjectRoot'; & '.\start-frontend.ps1'"
-Start-Sleep -Seconds 1
+# Ожидание инициализации Backend (setup-demo-data + Express startup)
+Write-Host "⏳ Ожидание инициализации Backend..." -ForegroundColor Yellow
+Start-Sleep -Seconds 5
+
+# Проверка что Backend готов
+$backendReady = $false
+for ($i = 0; $i -lt 10; $i++) {
+    try {
+        $response = Invoke-WebRequest -Uri "http://localhost:3000/health" -ErrorAction SilentlyContinue -TimeoutSec 1
+        if ($response.StatusCode -eq 200) {
+            Write-Host "✅ Backend готов к работе!" -ForegroundColor Green
+            $backendReady = $true
+            break
+        }
+    } catch {
+        # Ждём дальше
+        Start-Sleep -Seconds 1
+    }
+}
+
+if (-not $backendReady) {
+    Write-Host "⚠️  Backend может еще инициализироваться..." -ForegroundColor Yellow
+}
+
+# Запуск Frontend в новом окне (с явной передачей PORT)
+Write-Host "`n2️⃣  Запуск Frontend (порт 3001)..." -ForegroundColor Cyan
+$env:PORT = "3001"
+Start-Process powershell.exe -ArgumentList "-NoExit -Command `$env:PORT='3001'; cd '$ProjectRoot'; & '.\start-frontend.ps1'"
+Start-Sleep -Seconds 2
 
 Write-Host "`n✅ Оба сервера запущены!" -ForegroundColor Green
 Write-Host "`n📱 Откройте в браузере: http://localhost:3001" -ForegroundColor Cyan
 Write-Host "`n📝 Демо-учетные данные:" -ForegroundColor Yellow
 Write-Host "   Email: test@example.com" -ForegroundColor Gray
 Write-Host "   Password: Test123!" -ForegroundColor Gray
+Write-Host "`n✨ Функции для тестирования:" -ForegroundColor Cyan
+Write-Host "   1. Регистрация новых пользователей (/register)" -ForegroundColor Gray
+Write-Host "   2. Вход и управление предложениями (/proposals)" -ForegroundColor Gray
+Write-Host "   3. Создание коммерческих предложений" -ForegroundColor Gray
+Write-Host "   4. Генерация PDF из предложений" -ForegroundColor Gray
 Write-Host "`n⏹️  Для остановки закройте оба PowerShell окна`n" -ForegroundColor Yellow

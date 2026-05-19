@@ -9,6 +9,10 @@ Write-Host "║    Port: 3001                             ║" -ForegroundColor 
 Write-Host "║    Backend API: http://localhost:3000/api║" -ForegroundColor Cyan
 Write-Host "╚═══════════════════════════════════════════╝`n" -ForegroundColor Cyan
 
+# ⚠️ ВАЖНО: Установить PORT ДО запуска Next.js
+$env:PORT = "3001"
+Write-Host "🔧 PORT установлен на: $($env:PORT)`n" -ForegroundColor Cyan
+
 # Переход в папку frontend
 Write-Host "📁 Переход в папку frontend..." -ForegroundColor Cyan
 Set-Location -Path "$PSScriptRoot\frontend"
