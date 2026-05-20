@@ -1,0 +1,154 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { apiClient, Proposal } from '@/lib/api';
+import { authManager } from '@/lib/auth';
+
+export default function ProposalsPage() {
+  const router = useRouter();
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!authManager.isAuthenticated()) {
+      router.push('/login');
+      return;
+    }
+
+    fetchProposals();
+  }, [router]);
+
+  const fetchProposals = async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.getProposals();
+      if (response.success && response.data?.proposals) {
+        setProposals(response.data.proposals);
+      } else {
+        setError(response.error?.message || 'Failed to load proposals');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load proposals');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Удалить предложение?')) return;
+
+    try {
+      await apiClient.deleteProposal(id);
+      setProposals(proposals.filter(p => p.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed');
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    const badges: Record<string, { bg: string; text: string }> = {
+      draft: { bg: 'bg-gray-100', text: 'text-gray-700' },
+      final: { bg: 'bg-green-100', text: 'text-green-700' },
+      archived: { bg: 'bg-gray-300', text: 'text-gray-700' },
+    };
+    const badge = badges[status] || badges.draft;
+    return (
+      <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
+        {status === 'draft' ? 'Черновик' : status === 'final' ? 'Финальный' : 'Архив'}
+      </span>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-12">
+        <div className="inline-block w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+        <p className="text-gray-600 mt-4">Загрузка...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Предложения</h1>
+          <p className="text-gray-600 mt-1">Управление коммерческими предложениями</p>
+        </div>
+        <Link
+          href="/proposals/new"
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+        >
+          + Новое предложение
+        </Link>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+          {error}
+        </div>
+      )}
+
+      {/* List */}
+      {proposals.length === 0 ? (
+        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+          <div className="text-4xl mb-4">📋</div>
+          <p className="text-gray-600 mb-4">У вас пока нет предложений</p>
+          <Link
+            href="/proposals/new"
+            className="text-blue-600 hover:text-blue-800 font-medium"
+          >
+            Создать первое предложение
+          </Link>
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Название</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Статус</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Создано</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Действия</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {proposals.map((proposal) => (
+                <tr key={proposal.id} className="hover:bg-gray-50 transition">
+                  <td className="px-6 py-4 text-sm text-gray-900 font-medium">
+                    {proposal.title}
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    {getStatusBadge(proposal.status)}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    {new Date(proposal.created_at).toLocaleDateString('ru-RU')}
+                  </td>
+                  <td className="px-6 py-4 text-sm space-x-3 flex">
+                    <Link
+                      href={`/proposals/${proposal.id}`}
+                      className="text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      Редактировать
+                    </Link>
+                    <button
+                      onClick={() => handleDelete(proposal.id)}
+                      className="text-red-600 hover:text-red-800 font-medium"
+                    >
+                      Удалить
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
