@@ -12,23 +12,9 @@ const PORT = process.env.PORT || 3000;
 // ============= MIDDLEWARE =============
 
 // CORS
-const allowedOrigins = [
-  'http://localhost:3000',    // Frontend (если на одном сервере)
-  'http://localhost:3001',    // Frontend (separate port)
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:3001',
-  process.env.FRONTEND_URL,   // Из .env если указана
-].filter(Boolean);
-
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('CORS не разрешено'));
-      }
-    },
+    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -81,8 +67,8 @@ const startServer = async () => {
     console.log('✅ Модели синхронизированы с БД');
 
     // Запустим сервер
-    app.listen(PORT, () => {
-      console.log(`\n🚀 Сервер запущен на http://localhost:${PORT}`);
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`\n🚀 Сервер запущен на http://0.0.0.0:${PORT}`);
       console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`💾 Database: ${process.env.DATABASE_NAME || 'proposal_generator'}`);
       console.log(`\n📝 API Endpoints:`);
