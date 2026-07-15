@@ -246,15 +246,23 @@ Completed: 6 phases (1-5, 7+7.2) | In progress: Phase 8 (deployment) | Remaining
 
 ## 🔄 Следующие шаги
 
-### Ближайшие приоритеты
+### Ближайшие приоритеты (в этом порядке)
 
-1. Ручное тестирование PDF генерации end-to-end
-2. Phase 6: Advanced Backend Features
+1. **[Phase 9: Визуальный редизайн КП](PLANNING/PHASE_9_KP_VISUAL_REDESIGN.md)** — привести
+   вид генерируемого КП и модель данных к тому, что реально ожидает заказчик (сейчас делается
+   вручную). Цель — чтобы заказчик мог полностью перейти на генератор. Детали макета уточняются
+   в отдельной сессии на реальных образцах.
+2. **[Phase 10: AI-анализ рынка и каталог цен](PLANNING/PHASE_10_AI_PRICE_INTELLIGENCE.md)** —
+   Nextcloud + n8n + локальный LLM автоматически извлекают цены на работы из документов
+   (свои старые КП / прайсы поставщиков / конкурентов) в каталог, который подсказывает цены
+   при создании нового КП. Делается **после** Phase 9. Требует отдельно разворачиваемого
+   локального AI-инференса (GPU).
 
 ### Долгосрочный план
 
-- Phase 6: Advanced Backend Features (Notifications, Exports)
-- Phase 8: Deployment & Production (Docker, CI/CD)
+- Phase 6: Advanced Backend Features (Notifications, Exports) — отложено, не приоритет
+- Phase 9: Визуальный редизайн КП (см. выше)
+- Phase 10: AI-анализ рынка и каталог цен (см. выше)
 - Post-Launch: Performance, Analytics, Advanced Features
 
 ---
