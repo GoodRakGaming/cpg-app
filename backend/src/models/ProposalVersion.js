@@ -50,6 +50,7 @@ module.exports = (sequelize) => {
       createdAt: {
         type: DataTypes.DATE,
         allowNull: true,
+        defaultValue: DataTypes.NOW,
         field: 'created_at',
       },
     },

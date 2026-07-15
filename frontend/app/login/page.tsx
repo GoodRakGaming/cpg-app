@@ -109,11 +109,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-          <p className="text-xs text-gray-600 text-center">
-            <strong>Демо:</strong> test@example.com / Test123!
-          </p>
-        </div>
       </div>
     </div>
   );

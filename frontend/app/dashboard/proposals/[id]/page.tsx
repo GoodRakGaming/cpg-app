@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { apiClient, Proposal } from '@/lib/api';
+import { apiClient, Proposal, API_BASE_URL } from '@/lib/api';
 import Link from 'next/link';
 
 interface ProposalVersion {
@@ -147,7 +147,6 @@ export default function ProposalEditorPage() {
     }
   };
 
-  const getApiBase = () => `http://${window.location.hostname}:3000/api`;
   const getToken = () => localStorage.getItem('access_token');
 
   const handlePreviewPDF = async () => {
@@ -156,7 +155,7 @@ export default function ProposalEditorPage() {
       setPdfStatus('generating');
       setError(null);
 
-      const response = await fetch(`${getApiBase()}/pdf/preview/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/pdf/preview/${id}`, {
         headers: { 'Authorization': `Bearer ${getToken()}` },
       });
       if (!response.ok) {
@@ -180,7 +179,7 @@ export default function ProposalEditorPage() {
       setPdfDownloading(true);
       setError(null);
 
-      const response = await fetch(`${getApiBase()}/pdf/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/pdf/${id}`, {
         headers: { 'Authorization': `Bearer ${getToken()}` },
       });
       if (!response.ok) {

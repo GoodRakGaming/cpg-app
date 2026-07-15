@@ -81,6 +81,11 @@ Completed: 6 phases (1-5, 7+7.2) | In progress: Phase 8 (deployment) | Remaining
 - PDF download URL: динамический hostname вместо захардкоженного localhost
 - Отсутствующий endpoint `POST /api/proposals/:id/versions/:version_id/restore` — добавлен
 - Убраны debug console.log из login.tsx
+- Дата версии показывала `01.01.1970` — модель `ProposalVersion` объявляла колонку `createdAt` без `defaultValue`, из-за чего Sequelize слал явный `NULL` в INSERT, перебивая `DEFAULT CURRENT_TIMESTAMP` в схеме БД; добавлен `defaultValue: DataTypes.NOW`
+- Preview/скачивание PDF падали с `Failed to fetch` на проде — код в `proposals/[id]/page.tsx` хардкодил `http://{hostname}:3000/api` в обход `NEXT_PUBLIC_API_URL`; заменено на общий `API_BASE_URL` из `lib/api.ts`
+- Пароль при регистрации отклонялся с неинформативной ошибкой — regex валидации принимал спецсимвол только из узкого списка `@$!%*?&`; расширено до любого не-буквенно-цифрового символа
+- Удалён мёртвый дублирующий файл `backend/src/validators/index.js` (Node резолвил `.js`-файл раньше одноимённой директории, так что этот код никогда не выполнялся, но вводил в заблуждение при чтении)
+- Убрана плашка с демо-учётными данными (`test@example.com` / `Test123!`) со страницы логина — приложение теперь публичный продакшн, не демо-стенд
 
 ---
 

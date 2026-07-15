@@ -11,7 +11,7 @@ const getApiBaseUrl = () => {
   return 'http://localhost:3000/api';
 };
 
-const API_BASE_URL = getApiBaseUrl();
+export const API_BASE_URL = getApiBaseUrl();
 
 export interface ApiResponse<T = any> {
   success: boolean;

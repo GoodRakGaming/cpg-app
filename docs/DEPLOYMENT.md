@@ -29,7 +29,7 @@
 
 ### Домен и прокси
 
-`cp.profstroi74.ru` (+ punycode-синоним `ком.профстрой74.рф`) → Nginx Proxy Manager (101) → Let's Encrypt, публичный доступ (Publicly Accessible — сервисом пользуются клиенты извне, не только сотрудники).
+`cp.profstroi74.ru` (+ punycode-синоним `кп.профстрой74.рф`) → Nginx Proxy Manager (101) → Let's Encrypt, публичный доступ (Publicly Accessible — сервисом пользуются клиенты извне, не только сотрудники).
 
 Custom Locations в NPM:
 - `/` → `http://192.168.1.105:3001` (frontend, Next.js)
@@ -93,7 +93,6 @@ git push production main
 - [ ] Сменить пароль PostgreSQL `cpg_app` (см. выше)
 - [ ] Добавить LXC 106 в еженедельный бэкап Proxmox (снимок, вс 03:00, вместе с 101/102/104)
 - [ ] Написать нормальный migration runner вместо ручного накатывания SQL, если появятся новые миграции
-- [ ] `backend/src/validators/index.js` — мёртвый дублирующий файл (реально используется `backend/src/validators.js`, Node резолвит `.js`-файл раньше одноимённой директории); держит устаревшую мягкую валидацию пароля (min 6 без сложности) и вводит в заблуждение при чтении кода — кандидат на удаление
 - [ ] `npm audit` показывает 8 (backend) + 4 (frontend) уязвимостей, не разбирали подробно — стоит прогнать `npm audit` и оценить, что критично
 - [ ] Push в GitHub (`origin`) нужно делать с машины/сессии, где есть сохранённые GitHub-credentials — в сессии, где настраивался деплой (WSL), их не было
 - [ ] LVM thin-pool на хосте Proxmox (`local-lvm`) overprovisioned: 158 GB виртуальных дисков на пул 141 GB при 16 GB свободных в VG. Реальное заполнение пула ~48%, autoextend защита настроена (`thin_pool_autoextend_threshold=80`, `_percent=10`), но стоит периодически проверять `lvs`/`vgs`, особенно с ростом БД
