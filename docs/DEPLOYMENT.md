@@ -48,7 +48,7 @@ Custom Locations в NPM:
 
 ## Деплой: push-to-deploy без GitHub в цепочке
 
-GitHub (`YuraSukhanov/commercial_proposal_generator`, приватный) остаётся как бэкап/история, но **не участвует в деплое**. Схема — прямой git push с dev-машины на bare-репозиторий на сервере:
+GitHub (`GoodRakGaming/cpg-app`, приватный, доступ по SSH-ключу `~/.ssh/github_yura`) остаётся как бэкап/история, но **не участвует в деплое**. Схема — прямой git push с dev-машины на bare-репозиторий на сервере:
 
 ```
 рабочая машина (WSL)  --git push production main-->  bare repo на 192.168.1.105
@@ -64,7 +64,7 @@ GitHub (`YuraSukhanov/commercial_proposal_generator`, приватный) ост
 
 **Ремоуты в репозитории:**
 ```
-origin      https://github.com/YuraSukhanov/commercial_proposal_generator.git
+origin      git@github.com:GoodRakGaming/cpg-app.git
 production  ssh://cpg-deploy/home/deploy/repos/app.git
 ```
 
@@ -94,5 +94,5 @@ git push production main
 - [ ] Добавить LXC 106 в еженедельный бэкап Proxmox (снимок, вс 03:00, вместе с 101/102/104)
 - [ ] Написать нормальный migration runner вместо ручного накатывания SQL, если появятся новые миграции
 - [ ] `npm audit` показывает 8 (backend) + 4 (frontend) уязвимостей, не разбирали подробно — стоит прогнать `npm audit` и оценить, что критично
-- [ ] Push в GitHub (`origin`) нужно делать с машины/сессии, где есть сохранённые GitHub-credentials — в сессии, где настраивался деплой (WSL), их не было
+- [x] Push в GitHub — решено: выделенный SSH-ключ `~/.ssh/github_yura`, `origin` теперь `git@github.com:GoodRakGaming/cpg-app.git` (репозиторий пересоздан под новым аккаунтом `GoodRakGaming` после удаления старого `YuraSukhanov`; вся история перенесена)
 - [ ] LVM thin-pool на хосте Proxmox (`local-lvm`) overprovisioned: 158 GB виртуальных дисков на пул 141 GB при 16 GB свободных в VG. Реальное заполнение пула ~48%, autoextend защита настроена (`thin_pool_autoextend_threshold=80`, `_percent=10`), но стоит периодически проверять `lvs`/`vgs`, особенно с ростом БД
