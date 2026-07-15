@@ -14,6 +14,13 @@ const pdfService = require('../services/pdfService');
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
+// HTTP headers only allow ISO-8859-1; proposal titles are usually Cyrillic,
+// so encode per RFC 5987 with an ASCII fallback for older clients.
+function contentDisposition(type, filename) {
+  const asciiFallback = filename.replace(/[^\x20-\x7E]/g, '_');
+  return `${type}; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
 async function findProposal(proposalId, userId, includeVersion = false) {
   const include = [{ association: 'template' }];
   if (includeVersion) include.push({ association: 'currentVersion' });
@@ -82,7 +89,7 @@ router.post('/generate/:proposalId', authenticateToken, async (req, res) => {
     }
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${proposal.title}.pdf"`);
+    res.setHeader('Content-Disposition', contentDisposition('inline', `${proposal.title}.pdf`));
     res.setHeader('Content-Length', pdfBuffer.length);
     res.send(pdfBuffer);
   } catch (error) {
@@ -111,7 +118,7 @@ router.post('/export/:proposalId', authenticateToken, async (req, res) => {
     await proposal.update({ pdf_hash: pdfHash });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${proposal.title}_exported.pdf"`);
+    res.setHeader('Content-Disposition', contentDisposition('attachment', `${proposal.title}_exported.pdf`));
     res.setHeader('Content-Length', pdfBuffer.length);
     res.send(pdfBuffer);
   } catch (error) {
@@ -134,7 +141,7 @@ router.get('/:proposalId', authenticateToken, async (req, res) => {
     console.log(`📄 PDF generated for "${proposal.title}": ${pdfBuffer.length} bytes, starts with: ${pdfBuffer.slice(0, 5).toString('ascii')}`);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${proposal.title}.pdf"`);
+    res.setHeader('Content-Disposition', contentDisposition('attachment', `${proposal.title}.pdf`));
     res.setHeader('Content-Length', pdfBuffer.length);
     res.send(pdfBuffer);
   } catch (error) {
