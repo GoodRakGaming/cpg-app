@@ -1,19 +1,21 @@
 # 📊 Статус проекта Commercial Proposal Generator
 
-**Обновлено:** 2026-05-21  
-**Версия:** Beta (Phase 7.2/8 Complete)  
+**Обновлено:** 2026-07-15  
+**Версия:** Beta, развёрнута на продакшн-домене  
 **Ответственный за обновление:** System
 
 ---
 
 ## 📈 Прогресс проекта
 
-### Общий статус: **75% Complete** (6 из 8 фаз)
+### Общий статус: **~85% Complete** (6.5 из 8 фаз)
 
 ```
-██████████████████████████████░░░░░░░░░░ 75%
-Completed: 6 phases (1-5, 7+7.2) | Remaining: 2 phases (6, 8)
+███████████████████████████████████░░░░░ 85%
+Completed: 6 phases (1-5, 7+7.2) | In progress: Phase 8 (deployment) | Remaining: Phase 6
 ```
+
+Приложение развёрнуто и доступно публично: **https://cp.profstroi74.ru** (LXC-контейнер на домашнем Proxmox-сервере). Подробности инфраструктуры, деплоя и известных незакрытых вопросов — в [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ---
 
@@ -90,11 +92,13 @@ Completed: 6 phases (1-5, 7+7.2) | Remaining: 2 phases (6, 8)
 - Email отправка КП
 - Статистика и аналитика
 
-### Phase 8: Deployment & Optimization
-- Docker контейнеризация
-- CI/CD pipeline (GitHub Actions)
-- Production deployment
-- Performance optimization
+### Phase 8: Deployment & Optimization 🔶 в процессе
+- ✅ Production deployment — LXC на Proxmox, домен `cp.profstroi74.ru` через Nginx Proxy Manager + Let's Encrypt
+- ✅ Push-to-deploy пайплайн (git push на bare-репозиторий → post-receive hook → build → pm2 reload), без Docker/CI
+- ⏳ Docker-контейнеризация — не делали, решили что не нужна для текущего масштаба (LXC + pm2 достаточно)
+- ⏳ CI/CD pipeline (GitHub Actions) — рассматривали self-hosted runner для авто-деплоя на push, отложили; сейчас деплой запускается вручную командой `git push production main`
+- ⏳ Performance optimization — не делали
+- Подробности и открытые вопросы: [DEPLOYMENT.md](DEPLOYMENT.md)
 
 ---
 

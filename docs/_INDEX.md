@@ -11,9 +11,10 @@
 | Документ | Аудитория | Описание |
 |----------|-----------|---------|
 | [README.md](README.md) | Все | Главная навигация и обзор проекта |
-| [STATUS.md](STATUS.md) | Все | Текущее состояние проекта (62.5% complete) |
+| [STATUS.md](STATUS.md) | Все | Текущее состояние проекта |
 | [START_HERE.md](GETTING_STARTED/START_HERE.md) ⭐ | Новичков | Как запустить проект в 2 способа |
 | [QUICK_START.md](GETTING_STARTED/QUICK_START.md) | Новичков | Подробный гайд запуска (для Windows) |
+| [DEPLOYMENT.md](DEPLOYMENT.md) 🚀 | DevOps | Продакшн-деплой: Proxmox LXC, NPM, push-to-deploy, известные проблемы |
 
 ---
 
