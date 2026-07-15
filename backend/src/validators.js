@@ -20,7 +20,7 @@ const registerSchema = Joi.object({
   password: Joi.string()
     .min(8)
     .required()
-    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
+    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).+$/)
     .messages({
       'string.min': 'Пароль должен быть не менее 8 символов',
       'string.pattern.base':
