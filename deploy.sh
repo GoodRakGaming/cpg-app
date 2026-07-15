@@ -6,9 +6,6 @@ echo "→ Backend: installing dependencies..."
 cd backend
 npm ci --omit=dev
 
-echo "→ Backend: running migrations..."
-npm run migrate
-
 cd ../frontend
 echo "→ Frontend: installing dependencies..."
 npm ci
