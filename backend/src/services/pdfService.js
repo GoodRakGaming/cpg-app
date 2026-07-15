@@ -19,8 +19,15 @@ async function initBrowser() {
   if (!browser) {
     try {
       browser = await puppeteer.launch({
-        headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--no-first-run',
+          '--no-zygote',
+        ],
       });
       console.log('✅ Puppeteer browser initialized');
     } catch (error) {
@@ -60,8 +67,8 @@ async function generatePdfFromHtml(htmlContent, options = {}) {
       waitUntil: 'networkidle0',
     });
 
-    // Generate PDF
-    const pdfBuffer = await page.pdf(pdfOptions);
+    // Generate PDF (Puppeteer v24+ returns Uint8Array, not Buffer)
+    const pdfBuffer = Buffer.from(await page.pdf(pdfOptions));
 
     // Close page
     await page.close();
@@ -123,10 +130,11 @@ function generateProposalHtml(proposal, template) {
     ? JSON.parse(template.data)
     : template.data || {};
 
-  // Parse proposal data
-  const proposalData = typeof proposal.data === 'string'
-    ? JSON.parse(proposal.data)
-    : proposal.data || {};
+  // Parse proposal data — prefer currentVersion.data (loaded via association), fallback to proposal.data
+  const rawProposalData = proposal.currentVersion?.data ?? proposal.data;
+  const proposalData = typeof rawProposalData === 'string'
+    ? JSON.parse(rawProposalData)
+    : rawProposalData || {};
 
   // Build HTML content
   const html = `
@@ -152,7 +160,6 @@ function generateProposalHtml(proposal, template) {
     
     .container {
       max-width: 210mm;
-      height: 297mm;
       margin: 0 auto;
       padding: 20mm;
       background: white;
@@ -297,28 +304,6 @@ function generateProposalHtml(proposal, template) {
       </span>
     </div>
     
-    <div class="section">
-      <h2>Proposal Information</h2>
-      <div class="details-grid">
-        <div class="detail-item">
-          <div class="detail-label">Proposal ID</div>
-          <div class="detail-value">${proposal.id}</div>
-        </div>
-        <div class="detail-item">
-          <div class="detail-label">Status</div>
-          <div class="detail-value">${proposal.status}</div>
-        </div>
-        <div class="detail-item">
-          <div class="detail-label">Created Date</div>
-          <div class="detail-value">${new Date(proposal.createdAt).toLocaleDateString()}</div>
-        </div>
-        <div class="detail-item">
-          <div class="detail-label">Version</div>
-          <div class="detail-value">v${proposal.current_version_id ? '1.0' : '1.0'}</div>
-        </div>
-      </div>
-    </div>
-    
     ${proposalData.description ? `
     <div class="section">
       <h2>Description</h2>
@@ -328,7 +313,12 @@ function generateProposalHtml(proposal, template) {
     </div>
     ` : ''}
     
-    ${templateData.items && Array.isArray(templateData.items) && templateData.items.length > 0 ? `
+    ${(() => {
+      const displayItems = (Array.isArray(proposalData.items) && proposalData.items.length > 0)
+        ? proposalData.items
+        : (Array.isArray(templateData.items) ? templateData.items : []);
+      if (displayItems.length === 0) return '';
+      return `
     <div class="section">
       <h2>Items</h2>
       <table class="items-table">
@@ -342,25 +332,25 @@ function generateProposalHtml(proposal, template) {
           </tr>
         </thead>
         <tbody>
-          ${templateData.items.map(item => `
+          ${displayItems.map(item => `
             <tr>
               <td>${item.name || ''}</td>
               <td>${item.description || ''}</td>
               <td>${item.quantity || 1}</td>
-              <td>$${(item.price || 0).toFixed(2)}</td>
-              <td>$${((item.quantity || 1) * (item.price || 0)).toFixed(2)}</td>
+              <td>${(item.price || 0).toLocaleString('ru-RU')} руб.</td>
+              <td>${((item.quantity || 1) * (item.price || 0)).toLocaleString('ru-RU')} руб.</td>
             </tr>
           `).join('')}
           <tr class="total-row">
-            <td colspan="4">TOTAL</td>
-            <td>$${templateData.items.reduce((sum, item) => {
+            <td colspan="4">ИТОГО</td>
+            <td>${displayItems.reduce((sum, item) => {
               return sum + ((item.quantity || 1) * (item.price || 0));
-            }, 0).toFixed(2)}</td>
+            }, 0).toLocaleString('ru-RU')} руб.</td>
           </tr>
         </tbody>
       </table>
-    </div>
-    ` : ''}
+    </div>`;
+    })()}
     
     ${templateData.terms ? `
     <div class="section">
@@ -371,10 +361,15 @@ function generateProposalHtml(proposal, template) {
     </div>
     ` : ''}
     
+    ${templateData.footer ? `
     <div class="footer">
-      <p>Generated on ${new Date().toLocaleString()}</p>
-      <p>This is an automatically generated document.</p>
+      <p>${templateData.footer}</p>
     </div>
+    ` : `
+    <div class="footer">
+      <p>${new Date().toLocaleDateString('ru-RU')}</p>
+    </div>
+    `}
   </div>
 </body>
 </html>

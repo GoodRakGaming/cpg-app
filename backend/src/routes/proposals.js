@@ -48,6 +48,10 @@ router.post('/', authenticateToken, async (req, res, next) => {
       });
     }
 
+    // Копируем позиции из шаблона как начальные данные предложения
+    const initialItems = Array.isArray(template.data?.items) ? template.data.items : [];
+    const initialData = { items: initialItems, description: '', ...(value.data || {}) };
+
     // Создаём предложение
     const proposalId = uuidv4();
     const proposal = await Proposal.create({
@@ -63,14 +67,14 @@ router.post('/', authenticateToken, async (req, res, next) => {
     const versionId = uuidv4();
     const pdfHash = crypto
       .createHash('sha256')
-      .update(JSON.stringify(value.data || {}))
+      .update(JSON.stringify(initialData))
       .digest('hex');
 
     const version = await ProposalVersion.create({
       id: versionId,
       proposal_id: proposalId,
       version_number: 1,
-      data: value.data || {},
+      data: initialData,
       comment: 'Начальная версия',
       changed_by: req.userId,
       pdf_hash: pdfHash,
@@ -91,8 +95,8 @@ router.post('/', authenticateToken, async (req, res, next) => {
           user_id: proposal.user_id,
           current_version_id: proposal.current_version_id,
           version_number: version.version_number,
-          created_at: proposal.created_at,
-          updated_at: proposal.updated_at,
+          created_at: proposal.createdAt,
+          updated_at: proposal.updatedAt,
         },
       },
       message: 'Предложение успешно создано',
@@ -146,8 +150,8 @@ router.get('/', authenticateToken, async (req, res, next) => {
           template_id: p.template_id,
           template_name: p.template?.name,
           user_id: p.user_id,
-          created_at: p.created_at,
-          updated_at: p.updated_at,
+          created_at: p.createdAt,
+          updated_at: p.updatedAt,
         })),
         pagination: {
           total: count,
@@ -219,8 +223,8 @@ router.get('/:id', authenticateToken, async (req, res, next) => {
           version_number: currentVersion?.version_number,
           data: currentVersion?.data,
           comment: currentVersion?.comment,
-          created_at: proposal.created_at,
-          updated_at: proposal.updated_at,
+          created_at: proposal.createdAt,
+          updated_at: proposal.updatedAt,
         },
       },
       message: 'Предложение найдено',
@@ -323,7 +327,7 @@ router.put('/:id', authenticateToken, async (req, res, next) => {
           template_id: proposal.template_id,
           user_id: proposal.user_id,
           current_version_id: proposal.current_version_id,
-          updated_at: proposal.updated_at,
+          updated_at: proposal.updatedAt,
         },
       },
       message: 'Предложение успешно обновлено',
@@ -417,7 +421,7 @@ router.get('/:id/versions', authenticateToken, async (req, res, next) => {
           comment: v.comment,
           changed_by: v.changed_by,
           pdf_hash: v.pdf_hash,
-          created_at: v.created_at,
+          created_at: v.createdAt,
         })),
         total: versions.length,
       },
@@ -482,10 +486,82 @@ router.get('/:id/versions/:version_id', authenticateToken, async (req, res, next
           comment: version.comment,
           changed_by: version.changed_by,
           pdf_hash: version.pdf_hash,
-          created_at: version.created_at,
+          created_at: version.createdAt,
         },
       },
       message: 'Версия найдена',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/proposals/:id/versions/:version_id/restore
+ * Восстановить предложение до указанной версии
+ * Требует: JWT auth
+ */
+router.post('/:id/versions/:version_id/restore', authenticateToken, async (req, res, next) => {
+  try {
+    const proposal = await Proposal.findOne({
+      where: { id: req.params.id, user_id: req.userId, is_active: true },
+    });
+
+    if (!proposal) {
+      return res.status(404).json({
+        success: false,
+        error: { status: 404, message: 'Предложение не найдено' },
+      });
+    }
+
+    const version = await ProposalVersion.findOne({
+      where: { id: req.params.version_id, proposal_id: req.params.id },
+    });
+
+    if (!version) {
+      return res.status(404).json({
+        success: false,
+        error: { status: 404, message: 'Версия не найдена' },
+      });
+    }
+
+    const lastVersion = await ProposalVersion.findOne({
+      where: { proposal_id: req.params.id },
+      order: [['version_number', 'DESC']],
+    });
+    const nextVersionNumber = (lastVersion?.version_number || 0) + 1;
+    const pdfHash = crypto.createHash('sha256').update(JSON.stringify(version.data)).digest('hex');
+
+    const newVersionId = uuidv4();
+    await ProposalVersion.create({
+      id: newVersionId,
+      proposal_id: proposal.id,
+      version_number: nextVersionNumber,
+      data: version.data,
+      comment: `Восстановлено из версии ${version.version_number}`,
+      changed_by: req.userId,
+      pdf_hash: pdfHash,
+    });
+
+    proposal.current_version_id = newVersionId;
+    await proposal.save();
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        proposal: {
+          id: proposal.id,
+          title: proposal.title,
+          status: proposal.status,
+          template_id: proposal.template_id,
+          user_id: proposal.user_id,
+          current_version_id: proposal.current_version_id,
+          data: version.data,
+          created_at: proposal.createdAt,
+          updated_at: proposal.updatedAt,
+        },
+      },
+      message: `Предложение восстановлено до версии ${version.version_number}`,
     });
   } catch (err) {
     next(err);

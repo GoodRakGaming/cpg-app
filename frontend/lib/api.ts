@@ -3,7 +3,15 @@
  * Handles all communication with backend endpoints
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+const getApiBaseUrl = () => {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== 'undefined') {
+    return `http://${window.location.hostname}:3000/api`;
+  }
+  return 'http://localhost:3000/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -26,6 +34,7 @@ export interface User {
 export interface AuthResponse {
   user: User;
   access_token: string;
+  refresh_token?: string;
   expires_in: string;
 }
 
@@ -52,6 +61,7 @@ export interface Proposal {
   created_at: string;
   updated_at: string;
   is_active: boolean;
+  data: Record<string, any>;
 }
 
 export interface ProposalVersion {
@@ -85,30 +95,50 @@ class ApiClient {
     localStorage.removeItem('access_token');
   }
 
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit & { throwError?: boolean } = {}
-  ): Promise<ApiResponse<T>> {
-    const { throwError = true, ...fetchOptions } = options;
-
-    const headers: HeadersInit = {
+  private buildHeaders(extraHeaders?: Record<string, string>): Record<string, string> {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...fetchOptions.headers,
+      ...extraHeaders,
     };
-
-    // Always read token from localStorage if not set on instance
-    // This handles page refreshes and cross-module imports
     const token = this.token || (typeof window !== 'undefined' ? localStorage.getItem('access_token') : null);
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
+    return headers;
+  }
+
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit & { throwError?: boolean; _isRetry?: boolean } = {}
+  ): Promise<ApiResponse<T>> {
+    const { throwError = true, _isRetry = false, ...fetchOptions } = options;
 
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         ...fetchOptions,
-        headers,
-        credentials: 'include', // CRITICAL: Include cookies in cross-origin requests
+        headers: this.buildHeaders(fetchOptions.headers as Record<string, string>),
+        credentials: 'include',
       });
+
+      // Try to refresh token on 401, then retry once
+      if (response.status === 401 && !_isRetry && typeof window !== 'undefined') {
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (refreshToken) {
+          try {
+            const refreshed = await this.refreshToken(refreshToken);
+            if (refreshed.success && refreshed.data?.access_token) {
+              this.setToken(refreshed.data.access_token);
+              return this.request<T>(endpoint, { ...options, _isRetry: true });
+            }
+          } catch {
+            // refresh failed — fall through to redirect
+          }
+        }
+        this.clearToken();
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+        return { success: false } as ApiResponse<T>;
+      }
 
       const data = await response.json();
 
@@ -213,11 +243,11 @@ class ApiClient {
     return this.request(`/proposals?limit=${limit}&offset=${offset}`, { method: 'GET' });
   }
 
-  async getProposal(id: string): Promise<ApiResponse<Proposal>> {
+  async getProposal(id: string): Promise<ApiResponse<{ proposal: Proposal }>> {
     return this.request(`/proposals/${id}`, { method: 'GET' });
   }
 
-  async updateProposal(id: string, payload: { title?: string; status?: string; data?: Record<string, any> }): Promise<ApiResponse<Proposal>> {
+  async updateProposal(id: string, payload: { title?: string; status?: string; data?: Record<string, any> }): Promise<ApiResponse<{ proposal: Proposal }>> {
     return this.request(`/proposals/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
@@ -228,11 +258,11 @@ class ApiClient {
     return this.request(`/proposals/${id}`, { method: 'DELETE' });
   }
 
-  async getProposalVersions(id: string): Promise<ApiResponse<ProposalVersion[]>> {
+  async getProposalVersions(id: string): Promise<ApiResponse<{ versions: ProposalVersion[]; total: number }>> {
     return this.request(`/proposals/${id}/versions`, { method: 'GET' });
   }
 
-  async restoreProposalVersion(proposalId: string, versionId: string): Promise<ApiResponse<Proposal>> {
+  async restoreProposalVersion(proposalId: string, versionId: string): Promise<ApiResponse<{ proposal: Proposal }>> {
     return this.request(`/proposals/${proposalId}/versions/${versionId}/restore`, {
       method: 'POST',
     });
@@ -258,7 +288,7 @@ class ApiClient {
     });
   }
 
-  async getPDFStatus(proposalId: string): Promise<ApiResponse<{ status: string; url?: string; error?: string }>> {
+  async getPDFStatus(proposalId: string): Promise<ApiResponse<{ proposal_id: string; pdf_hash: string | null; is_cached: boolean; status: string }>> {
     return this.request(`/pdf/status/${proposalId}`, { method: 'GET' });
   }
 }

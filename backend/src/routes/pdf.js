@@ -1,261 +1,37 @@
 /**
  * PDF Generation Routes
- * Endpoints for PDF generation and management
- * POST /api/pdf/generate/:proposalId - Generate PDF from proposal
- * GET /api/pdf/:proposalId - Download generated PDF
- * POST /api/pdf/export/:proposalId - Export proposal as PDF
+ * IMPORTANT: specific routes (/status, /preview, /generate, /export) must come
+ * before the generic /:proposalId route to avoid Express swallowing them.
  */
 
 const express = require('express');
 const router = express.Router();
-const { v4: uuidv4 } = require('uuid');
 const path = require('path');
-const fs = require('fs').promises;
 
 const { authenticateToken } = require('../middleware/auth');
-const { Proposal, Template, User } = require('../models');
+const { Proposal } = require('../models');
 const pdfService = require('../services/pdfService');
 
-/**
- * POST /api/pdf/generate/:proposalId
- * Generate PDF from proposal data
- * Returns: PDF file stream
- */
-router.post('/generate/:proposalId', authenticateToken, async (req, res) => {
-  try {
-    const { proposalId } = req.params;
-    const userId = req.userId;
+// ─── helpers ────────────────────────────────────────────────────────────────
 
-    // Find proposal
-    const proposal = await Proposal.findByPk(proposalId, {
-      include: [
-        { association: 'template' },
-        { association: 'currentVersion' },
-      ],
-    });
+async function findProposal(proposalId, userId, includeVersion = false) {
+  const include = [{ association: 'template' }];
+  if (includeVersion) include.push({ association: 'currentVersion' });
 
-    if (!proposal) {
-      return res.status(404).json({
-        success: false,
-        error: 'Proposal not found',
-      });
-    }
+  const proposal = await Proposal.findByPk(proposalId, { include });
+  if (!proposal) return { error: 404, message: 'Предложение не найдено' };
+  if (proposal.user_id !== userId) return { error: 403, message: 'Нет доступа' };
+  if (!proposal.is_active) return { error: 410, message: 'Предложение удалено' };
+  return { proposal };
+}
 
-    // Verify access (user owns proposal)
-    if (proposal.user_id !== userId) {
-      return res.status(403).json({
-        success: false,
-        error: 'Access denied',
-      });
-    }
+// ─── GET /api/pdf/status/:proposalId ────────────────────────────────────────
 
-    // Check if proposal is not active (soft deleted)
-    if (!proposal.is_active) {
-      return res.status(410).json({
-        success: false,
-        error: 'Proposal has been deleted',
-      });
-    }
-
-    // Generate HTML from template
-    const htmlContent = pdfService.generateProposalHtml(proposal, proposal.template);
-
-    // Generate PDF
-    const pdfBuffer = await pdfService.generatePdfFromHtml(htmlContent);
-
-    // Calculate hash for caching
-    const pdfHash = pdfService.calculatePdfHash(pdfBuffer);
-
-    // Update proposal with PDF hash if different
-    if (proposal.pdf_hash !== pdfHash) {
-      await proposal.update({ pdf_hash: pdfHash });
-    }
-
-    // Set response headers
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${proposal.title}.pdf"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-
-    // Send PDF
-    res.send(pdfBuffer);
-  } catch (error) {
-    console.error('PDF generation error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to generate PDF',
-    });
-  }
-});
-
-/**
- * GET /api/pdf/:proposalId
- * Download previously generated PDF
- * Returns: PDF file stream
- */
-router.get('/:proposalId', authenticateToken, async (req, res) => {
-  try {
-    const { proposalId } = req.params;
-    const userId = req.userId;
-
-    // Find proposal
-    const proposal = await Proposal.findByPk(proposalId, {
-      include: [
-        { association: 'template' },
-      ],
-    });
-
-    if (!proposal) {
-      return res.status(404).json({
-        success: false,
-        error: 'Proposal not found',
-      });
-    }
-
-    // Verify access
-    if (proposal.user_id !== userId) {
-      return res.status(403).json({
-        success: false,
-        error: 'Access denied',
-      });
-    }
-
-    // Check if active
-    if (!proposal.is_active) {
-      return res.status(410).json({
-        success: false,
-        error: 'Proposal has been deleted',
-      });
-    }
-
-    // Generate PDF
-    const htmlContent = pdfService.generateProposalHtml(proposal, proposal.template);
-    const pdfBuffer = await pdfService.generatePdfFromHtml(htmlContent);
-
-    // Set response headers
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${proposal.title}.pdf"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-
-    // Send PDF
-    res.send(pdfBuffer);
-  } catch (error) {
-    console.error('PDF download error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to download PDF',
-    });
-  }
-});
-
-/**
- * POST /api/pdf/export/:proposalId
- * Export proposal as PDF with formatting options
- * Body: { format?, margin?, printBackground? }
- * Returns: PDF file stream
- */
-router.post('/export/:proposalId', authenticateToken, async (req, res) => {
-  try {
-    const { proposalId } = req.params;
-    const userId = req.userId;
-    const { format, margin, printBackground } = req.body;
-
-    // Find proposal
-    const proposal = await Proposal.findByPk(proposalId, {
-      include: [
-        { association: 'template' },
-      ],
-    });
-
-    if (!proposal) {
-      return res.status(404).json({
-        success: false,
-        error: 'Proposal not found',
-      });
-    }
-
-    // Verify access
-    if (proposal.user_id !== userId) {
-      return res.status(403).json({
-        success: false,
-        error: 'Access denied',
-      });
-    }
-
-    // Check if active
-    if (!proposal.is_active) {
-      return res.status(410).json({
-        success: false,
-        error: 'Proposal has been deleted',
-      });
-    }
-
-    // Generate HTML
-    const htmlContent = pdfService.generateProposalHtml(proposal, proposal.template);
-
-    // PDF options
-    const pdfOptions = {
-      format: format || 'A4',
-      margin: margin || {
-        top: '10mm',
-        right: '10mm',
-        bottom: '10mm',
-        left: '10mm',
-      },
-      printBackground: printBackground !== false,
-    };
-
-    // Generate PDF with options
-    const pdfBuffer = await pdfService.generatePdfFromHtml(htmlContent, pdfOptions);
-
-    // Calculate hash
-    const pdfHash = pdfService.calculatePdfHash(pdfBuffer);
-
-    // Update proposal
-    await proposal.update({ pdf_hash: pdfHash });
-
-    // Set response headers
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${proposal.title}_exported.pdf"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-
-    // Send PDF
-    res.send(pdfBuffer);
-  } catch (error) {
-    console.error('PDF export error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to export PDF',
-    });
-  }
-});
-
-/**
- * GET /api/pdf/status/:proposalId
- * Get PDF generation status and hash
- */
 router.get('/status/:proposalId', authenticateToken, async (req, res) => {
   try {
-    const { proposalId } = req.params;
-    const userId = req.userId;
-
-    // Find proposal
-    const proposal = await Proposal.findByPk(proposalId);
-
-    if (!proposal) {
-      return res.status(404).json({
-        success: false,
-        error: 'Proposal not found',
-      });
-    }
-
-    // Verify access
-    if (proposal.user_id !== userId) {
-      return res.status(403).json({
-        success: false,
-        error: 'Access denied',
-      });
-    }
+    const proposal = await Proposal.findByPk(req.params.proposalId);
+    if (!proposal) return res.status(404).json({ success: false, error: 'Proposal not found' });
+    if (proposal.user_id !== req.userId) return res.status(403).json({ success: false, error: 'Access denied' });
 
     res.json({
       success: true,
@@ -269,10 +45,101 @@ router.get('/status/:proposalId', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('PDF status error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to get PDF status',
-    });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ─── GET /api/pdf/preview/:proposalId ───────────────────────────────────────
+// Returns HTML — no Puppeteer, instant preview in iframe
+
+router.get('/preview/:proposalId', authenticateToken, async (req, res) => {
+  try {
+    const { error, message, proposal } = await findProposal(req.params.proposalId, req.userId, true);
+    if (error) return res.status(error).json({ success: false, error: message });
+
+    const html = pdfService.generateProposalHtml(proposal, proposal.template);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (error) {
+    console.error('PDF preview error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ─── POST /api/pdf/generate/:proposalId ─────────────────────────────────────
+
+router.post('/generate/:proposalId', authenticateToken, async (req, res) => {
+  try {
+    const { error, message, proposal } = await findProposal(req.params.proposalId, req.userId, true);
+    if (error) return res.status(error).json({ success: false, error: message });
+
+    const html = pdfService.generateProposalHtml(proposal, proposal.template);
+    const pdfBuffer = await pdfService.generatePdfFromHtml(html);
+    const pdfHash = pdfService.calculatePdfHash(pdfBuffer);
+
+    if (proposal.pdf_hash !== pdfHash) {
+      await proposal.update({ pdf_hash: pdfHash });
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${proposal.title}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('PDF generation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ─── POST /api/pdf/export/:proposalId ───────────────────────────────────────
+
+router.post('/export/:proposalId', authenticateToken, async (req, res) => {
+  try {
+    const { error, message, proposal } = await findProposal(req.params.proposalId, req.userId, true);
+    if (error) return res.status(error).json({ success: false, error: message });
+
+    const { format, margin, printBackground } = req.body;
+    const pdfOptions = {
+      format: format || 'A4',
+      margin: margin || { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
+      printBackground: printBackground !== false,
+    };
+
+    const html = pdfService.generateProposalHtml(proposal, proposal.template);
+    const pdfBuffer = await pdfService.generatePdfFromHtml(html, pdfOptions);
+    const pdfHash = pdfService.calculatePdfHash(pdfBuffer);
+    await proposal.update({ pdf_hash: pdfHash });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${proposal.title}_exported.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('PDF export error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ─── GET /api/pdf/:proposalId ────────────────────────────────────────────────
+// Must be last — generic route would swallow /status, /preview, etc.
+
+router.get('/:proposalId', authenticateToken, async (req, res) => {
+  try {
+    const { error, message, proposal } = await findProposal(req.params.proposalId, req.userId, true);
+    if (error) return res.status(error).json({ success: false, error: message });
+
+    const html = pdfService.generateProposalHtml(proposal, proposal.template);
+    const pdfBuffer = await pdfService.generatePdfFromHtml(html);
+
+    console.log(`📄 PDF generated for "${proposal.title}": ${pdfBuffer.length} bytes, starts with: ${pdfBuffer.slice(0, 5).toString('ascii')}`);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${proposal.title}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('PDF download error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

@@ -47,11 +47,14 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(64),
         allowNull: true,
       },
+      createdAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'created_at',
+      },
     },
     {
       timestamps: false,
-      createdAt: false,
-      updatedAt: false,
       underscored: true,
       tableName: 'proposal_versions',
     }

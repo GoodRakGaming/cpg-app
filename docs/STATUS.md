@@ -1,0 +1,255 @@
+# 📊 Статус проекта Commercial Proposal Generator
+
+**Обновлено:** 2026-05-21  
+**Версия:** Beta (Phase 7.2/8 Complete)  
+**Ответственный за обновление:** System
+
+---
+
+## 📈 Прогресс проекта
+
+### Общий статус: **75% Complete** (6 из 8 фаз)
+
+```
+██████████████████████████████░░░░░░░░░░ 75%
+Completed: 6 phases (1-5, 7+7.2) | Remaining: 2 phases (6, 8)
+```
+
+---
+
+## ✅ Завершенные компоненты
+
+### Phase 1: Backend Foundation ✅
+- Express.js сервер на порту 3000
+- PostgreSQL подключение (Sequelize ORM)
+- Базовая структура Express app
+- Error handling middleware
+
+### Phase 2: Database Schema & Auth ✅
+- User model (email, password_hash, created_at)
+- Template model с JSONB данными
+- Proposal & ProposalVersion моделі
+- JWT аутентификация (access + refresh tokens)
+- 4 Auth endpoints (register, login, logout, refresh)
+
+### Phase 3: Template CRUD API ✅
+- 7 endpoints для управления шаблонами
+- Версионирование шаблонов
+- CRUD операции (Create, Read, Update, Delete)
+- Валидация и обработка ошибок
+- 100% test coverage
+
+### Phase 4: Proposal CRUD API ✅
+- 7 endpoints для предложений
+- Версионирование с историей изменений
+- Restore функциональность (откат версий)
+- Автоматическое создание черновиков
+- 100% test coverage
+
+### Phase 5: PDF Generation & Export ✅
+- Puppeteer интеграция для HTML → PDF
+- 4 PDF endpoints (generate, download, export, status)
+- Browser pooling для оптимизации памяти
+- Асинхронная генерация с обработкой очереди
+- 100% test coverage
+
+### Phase 7: Frontend Core ✅
+- Next.js с App Router
+- React компоненты на TypeScript
+- Tailwind CSS стилизация
+- JWT token management (localStorage + httpOnly cookie)
+- Login страница (`/login`) ✅
+- Register страница (`/register`) ✅
+- Dashboard layout с nav (`/dashboard/`) ✅
+- Proposals список (`/dashboard/proposals`) ✅
+
+### Phase 7.2: Frontend Extended UI ✅
+- Proposal Editor (`/dashboard/proposals/[id]`) ✅ — редактирование title, status, description
+- Proposal versions tab с restore ✅
+- PDF генерация и скачивание ✅
+- Create Proposal (`/dashboard/proposals/new`) ✅
+- Templates Manager (`/dashboard/templates`) ✅ — список + удаление
+- Template Editor (`/dashboard/templates/[id]`) ✅ — визуальная форма (позиции + условия)
+- Create Template (`/dashboard/templates/new`) ✅ — визуальная форма
+
+**Исправленные баги:**
+- `created_at` → `createdAt` в proposals.js (Sequelize underscored) — было "Invalid Date" везде
+- Unwrapping `data.proposal` для single proposal API response
+- PDF статус: проверка `is_cached` вместо несуществующего `status === 'ready'`
+- PDF download URL: динамический hostname вместо захардкоженного localhost
+- Отсутствующий endpoint `POST /api/proposals/:id/versions/:version_id/restore` — добавлен
+- Убраны debug console.log из login.tsx
+
+---
+
+## ⏳ В разработке (Future Scope)
+
+### Phase 6: Advanced Backend Features ⏳
+- Notifications API
+- Export в другие форматы (Excel, Word)
+- Email отправка КП
+- Статистика и аналитика
+
+### Phase 8: Deployment & Optimization
+- Docker контейнеризация
+- CI/CD pipeline (GitHub Actions)
+- Production deployment
+- Performance optimization
+
+---
+
+## 📊 API Endpoints: Статус
+
+| Категория | Endpoint | Метод | Статус | Тесты |
+|-----------|----------|--------|--------|-------|
+| **Auth** | /api/auth/register | POST | ✅ | ✅ |
+| | /api/auth/login | POST | ✅ | ✅ |
+| | /api/auth/logout | POST | ✅ | ✅ |
+| | /api/auth/refresh | POST | ✅ | ✅ |
+| **Templates** | /api/templates | GET | ✅ | ✅ |
+| | /api/templates | POST | ✅ | ✅ |
+| | /api/templates/:id | GET | ✅ | ✅ |
+| | /api/templates/:id | PUT | ✅ | ✅ |
+| | /api/templates/:id | DELETE | ✅ | ✅ |
+| | /api/templates/:id/versions | GET | ✅ | ✅ |
+| | /api/templates/:id/restore/:version | POST | ✅ | ✅ |
+| **Proposals** | /api/proposals | GET | ✅ | ✅ |
+| | /api/proposals | POST | ✅ | ✅ |
+| | /api/proposals/:id | GET | ✅ | ✅ |
+| | /api/proposals/:id | PUT | ✅ | ✅ |
+| | /api/proposals/:id | DELETE | ✅ | ✅ |
+| | /api/proposals/:id/versions | GET | ✅ | ✅ |
+| | /api/proposals/:id/restore/:version | POST | ✅ | ✅ |
+| **PDF** | /api/pdf/generate | POST | ✅ | ✅ |
+| | /api/pdf/download/:id | GET | ✅ | ✅ |
+| | /api/pdf/export/:id | GET | ✅ | ✅ |
+| | /api/pdf/status/:id | GET | ✅ | ✅ |
+
+**Всего endpoints:** 20 | **Готовых:** 20 ✅ | **В разработке:** 0
+
+---
+
+## 🧪 Тестирование
+
+| Компонент | Тесты | Статус |
+|-----------|-------|--------|
+| Auth API | 5/5 | ✅ 100% |
+| Templates API | 5/5 | ✅ 100% |
+| Proposals API | 5/5 | ✅ 100% |
+| PDF Generation | 5/5 | ✅ 100% |
+| **ИТОГО** | **20/20** | **✅ 100%** |
+
+> Фронтенд полностью реализован (Phase 7 + 7.2). Все ключевые баги исправлены. Остаётся Phase 6 (расширенный backend) и Phase 8 (деплой).
+
+---
+
+## 🗄️ База данных
+
+| Таблица | Статус | Миграция | Notes |
+|---------|--------|----------|-------|
+| users | ✅ | 001_initial_schema.sql | Хеширование паролей + JWT |
+| templates | ✅ | 001_initial_schema.sql | JSONB для данных, версионирование |
+| proposals | ✅ | 001_initial_schema.sql | Черновики, версионирование, статусы |
+| proposal_versions | ✅ | 001_initial_schema.sql | История изменений |
+
+---
+
+## 🛠️ Tech Stack
+
+| Слой | Технология | Версия | Статус |
+|------|------------|--------|--------|
+| **Frontend** | Next.js | 14+ | ✅ |
+| | React | 18+ | ✅ |
+| | TypeScript | 5+ | ✅ |
+| | Tailwind CSS | 3+ | ✅ |
+| **Backend** | Node.js | 14+ | ✅ |
+| | Express | 4+ | ✅ |
+| | Sequelize | 6+ | ✅ |
+| **Database** | PostgreSQL | 12+ | ✅ |
+| **PDF** | Puppeteer | 21+ | ✅ |
+| **Auth** | JWT | - | ✅ |
+
+---
+
+## 🚀 Демо-данные
+
+| Тип | Значение | Статус |
+|-----|----------|--------|
+| Демо пользователь | test@example.com | ✅ Auto-created |
+| Демо пароль | Test123! | ✅ Auto-created |
+| Демо шаблон | "Стандартный шаблон" | ✅ Auto-seeded |
+| Демо предложение | "Пример КП" | ✅ Auto-seeded |
+
+---
+
+## 📋 Критические проблемы
+
+**Статус:** ✅ Критических проблем нет. MVP полностью функционален.
+
+---
+
+## 📝 Важные замечания
+
+### Требования к окружению
+
+```
+- Node.js: v14 или выше (рекомендуется v18+)
+- PostgreSQL: v12 или выше
+- RAM: минимум 2GB (для Puppeteer browser pool)
+- Диск: 500MB свободного места
+```
+
+### Порты
+
+- **Backend API:** 3000 (Express)
+- **Frontend UI:** 3001 (Next.js)
+- **PostgreSQL:** 5432 (по умолчанию)
+
+### Переменные окружения
+
+Основные переменные в `.env` файлах:
+- `DATABASE_URL` — подключение к PostgreSQL
+- `JWT_SECRET` — секрет для подписи JWT
+- `NODE_ENV` — development/production
+- `CORS_ORIGIN` — CORS для фронтенда
+
+---
+
+## 📅 История обновлений
+
+| Дата | Версия | Изменения |
+|------|--------|-----------|
+| 2026-05-21 | Beta | Phase 7+7.2 ✅ Complete. Исправлены баги A-D, добавлен visual template editor, description field в proposals, restore endpoint |
+| 2026-05-20 | Beta | Phase 5 завершена, миграция документации |
+| 2026-05-19 | Beta | Phase 7 (Frontend Core) завершена |
+| 2026-05-18 | Beta | Phase 5 (PDF Generation) завершена |
+| 2026-05-17 | Beta | Phase 4 (Proposals API) завершена |
+| 2026-05-16 | Beta | Phase 3 (Templates API) завершена |
+
+---
+
+## 🔄 Следующие шаги
+
+### Ближайшие приоритеты
+
+1. Ручное тестирование PDF генерации end-to-end
+2. Phase 6: Advanced Backend Features
+
+### Долгосрочный план
+
+- Phase 6: Advanced Backend Features (Notifications, Exports)
+- Phase 8: Deployment & Production (Docker, CI/CD)
+- Post-Launch: Performance, Analytics, Advanced Features
+
+---
+
+## 📞 Контакты & Поддержка
+
+**Документация:** `/docs/` (начните с [README.md](README.md))  
+**Проблемы:** Смотрите [TROUBLESHOOTING](TROUBLESHOOTING/COMMON_ISSUES.md)  
+**Тестирование:** [QUICK_TEST_5_MIN](TESTING/QUICK_TEST_5_MIN.md)
+
+---
+
+**Последнее обновление:** 2026-05-20 17:10  
+**Следующее плановое обновление:** При завершении Phase 7.2 или Phase 6

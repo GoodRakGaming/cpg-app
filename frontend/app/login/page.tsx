@@ -19,43 +19,25 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      console.log('🔐 Начинаю логин с:', email);
       const response = await apiClient.login(email, password);
-      console.log('✅ API ответил:', response);
 
       if (!response.success) {
-        console.error('❌ Login failed:', response.error?.message);
         setError(response.error?.message || 'Login failed');
         return;
       }
 
-      // Save user data
       if (response.data?.user) {
-        console.log('💾 Сохраняю user:', response.data.user);
         authManager.setUser(response.data.user);
       }
 
-      // Save tokens (access_token is returned, refresh_token is in httpOnly cookie)
       if (response.data?.access_token) {
-        console.log('💾 Сохраняю access_token');
-        // Note: refresh_token is automatically stored in httpOnly cookie by backend
-        // We only need to store access_token for client-side use
         authManager.setTokens(response.data.access_token, '');
-        
-        // Debug: Check what got stored
-        console.log('✅ Login successful! Tokens saved.');
-        console.log('Access Token:', authManager.getAccessToken() ? '✅ Saved' : '❌ Not saved');
-        console.log('User:', authManager.getUser());
       }
 
-      // Small delay to ensure state is updated
       await new Promise(resolve => setTimeout(resolve, 100));
-      
-      console.log('🚀 Перенаправляю на /proposals...');
-      router.push('/proposals');
-      console.log('✅ router.push() выполнен!');
+      router.push('/dashboard/proposals');
     } catch (err) {
-      console.error('❌ Catch ошибка:', err);
+      console.error('Login error:', err);
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setLoading(false);
@@ -89,7 +71,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 outline-none transition"
               placeholder="user@example.com"
             />
           </div>
@@ -104,7 +86,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 outline-none transition"
               placeholder="••••••••"
             />
           </div>
