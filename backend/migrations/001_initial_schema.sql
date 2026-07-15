@@ -73,6 +73,3 @@ COMMENT ON COLUMN "templates".data IS 'JSON структура шаблона с
 COMMENT ON COLUMN "proposals".status IS 'Статус КП: draft (черновик), final (финальный), archived (архивирован)';
 COMMENT ON COLUMN "proposal_versions".data IS 'Снимок всех данных КП в момент сохранения версии';
 COMMENT ON COLUMN "proposal_versions".pdf_hash IS 'SHA256 хеш HTML для определения необходимости пересоздания PDF';
-
--- Вывод успешного выполнения
-\echo 'Миграция 001: Начальная схема БД успешно создана!'

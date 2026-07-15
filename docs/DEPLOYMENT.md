@@ -41,8 +41,8 @@ Custom Locations в NPM:
 
 - БД `proposals`, пользователь `cpg_app`
 - Схема накатана вручную из `backend/migrations/001_initial_schema.sql` (единственный файл, `CREATE TABLE IF NOT EXISTS` — идемпотентен)
-- ⚠️ **`migrations/run.js` не существует** — скрипт `npm run migrate` из `package.json`/старой документации никогда не был реализован. Если появятся новые миграции — накатывать вручную через `psql`, либо сначала написать реальный migration runner.
-- ⚠️ **Пароль `cpg_app` засветился в истории чата** (сессия, где настраивался деплой) — рекомендовано сменить: `ALTER USER cpg_app WITH PASSWORD '...'` + обновить `DATABASE_PASSWORD`/`DATABASE_URL` в `backend/.env` на сервере + `pm2 restart cpg-backend`.
+- ✅ `migrations/run.js` реализован — простой runner на `pg`: применяет `.sql`-файлы из `backend/migrations/` по алфавиту, отслеживает применённые в таблице `schema_migrations`, оборачивает каждую миграцию в транзакцию. Встроен обратно в `deploy.sh`, выполняется на каждом деплое автоматически. Чтобы добавить новую миграцию — просто положите файл `002_....sql` в `backend/migrations/`, закоммитьте и запушьте.
+- ✅ Пароль `cpg_app` (изначально засветившийся в истории чата на этапе первичной настройки) сменён — новый сгенерирован и применён скриптом прямо на сервере, нигде не отображался.
 
 ---
 
@@ -90,9 +90,9 @@ git push production main
 
 ## Известные незакрытые вопросы (Phase 8, продолжение)
 
-- [ ] Сменить пароль PostgreSQL `cpg_app` (см. выше)
-- [ ] Добавить LXC 106 в еженедельный бэкап Proxmox (снимок, вс 03:00, вместе с 101/102/104)
-- [ ] Написать нормальный migration runner вместо ручного накатывания SQL, если появятся новые миграции
+- [x] Пароль PostgreSQL `cpg_app` сменён (сгенерирован и применён прямо на сервере, никогда не показывался в чате)
+- [x] LXC 106 добавлен в еженедельный бэкап Proxmox и в watchdog-workflow в n8n (сделано пользователем самостоятельно)
+- [x] Migration runner написан (`backend/migrations/run.js` + `schema_migrations`), встроен в `deploy.sh`
 - [x] `npm audit` разобран — исправлено 7/8 (backend) и 3/4 (frontend) безопасными патчами. Осталось намеренно: `uuid` (backend, force-фикс откатил бы sequelize на 3 мажора назад) и `postcss` (frontend, force-фикс откатил бы next с 16 до 9.3.3) — обе низкого практического риска для того, как эти пакеты используются в проекте
 - [x] Push в GitHub — решено: выделенный SSH-ключ `~/.ssh/github_yura`, `origin` теперь `git@github.com:GoodRakGaming/cpg-app.git` (репозиторий пересоздан под новым аккаунтом `GoodRakGaming` после удаления старого `YuraSukhanov`; вся история перенесена)
 - [ ] LVM thin-pool на хосте Proxmox (`local-lvm`) overprovisioned: 158 GB виртуальных дисков на пул 141 GB при 16 GB свободных в VG. Реальное заполнение пула ~48%, autoextend защита настроена (`thin_pool_autoextend_threshold=80`, `_percent=10`), но стоит периодически проверять `lvs`/`vgs`, особенно с ростом БД
