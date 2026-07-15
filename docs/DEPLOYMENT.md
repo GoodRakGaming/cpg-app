@@ -93,6 +93,6 @@ git push production main
 - [ ] Сменить пароль PostgreSQL `cpg_app` (см. выше)
 - [ ] Добавить LXC 106 в еженедельный бэкап Proxmox (снимок, вс 03:00, вместе с 101/102/104)
 - [ ] Написать нормальный migration runner вместо ручного накатывания SQL, если появятся новые миграции
-- [ ] `npm audit` показывает 8 (backend) + 4 (frontend) уязвимостей, не разбирали подробно — стоит прогнать `npm audit` и оценить, что критично
+- [x] `npm audit` разобран — исправлено 7/8 (backend) и 3/4 (frontend) безопасными патчами. Осталось намеренно: `uuid` (backend, force-фикс откатил бы sequelize на 3 мажора назад) и `postcss` (frontend, force-фикс откатил бы next с 16 до 9.3.3) — обе низкого практического риска для того, как эти пакеты используются в проекте
 - [x] Push в GitHub — решено: выделенный SSH-ключ `~/.ssh/github_yura`, `origin` теперь `git@github.com:GoodRakGaming/cpg-app.git` (репозиторий пересоздан под новым аккаунтом `GoodRakGaming` после удаления старого `YuraSukhanov`; вся история перенесена)
 - [ ] LVM thin-pool на хосте Proxmox (`local-lvm`) overprovisioned: 158 GB виртуальных дисков на пул 141 GB при 16 GB свободных в VG. Реальное заполнение пула ~48%, autoextend защита настроена (`thin_pool_autoextend_threshold=80`, `_percent=10`), но стоит периодически проверять `lvs`/`vgs`, особенно с ростом БД
