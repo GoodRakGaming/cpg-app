@@ -14,6 +14,52 @@ const { Proposal, ProposalVersion, Template, User } = require('../models');
 const router = express.Router();
 
 /**
+ * Сравнивает данные предложения (старую и новую версию) и возвращает
+ * короткое человекочитаемое описание изменений, либо null, если
+ * содержимое не изменилось (в этом случае новую версию создавать не нужно).
+ */
+function diffProposalData(oldData, newData) {
+  const old = oldData || {};
+  const next = newData || {};
+  const oldItems = Array.isArray(old.items) ? old.items : [];
+  const newItems = Array.isArray(next.items) ? next.items : [];
+  const changes = [];
+
+  if (newItems.length > oldItems.length) {
+    changes.push(`добавлено позиций: ${newItems.length - oldItems.length}`);
+  } else if (newItems.length < oldItems.length) {
+    changes.push(`удалено позиций: ${oldItems.length - newItems.length}`);
+  }
+
+  const commonLength = Math.min(oldItems.length, newItems.length);
+  let nameChanged = false;
+  let priceChanged = false;
+  let qtyChanged = false;
+  let itemDescChanged = false;
+  for (let i = 0; i < commonLength; i++) {
+    const a = oldItems[i] || {};
+    const b = newItems[i] || {};
+    if ((a.name || '') !== (b.name || '')) nameChanged = true;
+    if (Number(a.price) !== Number(b.price)) priceChanged = true;
+    if (Number(a.quantity) !== Number(b.quantity)) qtyChanged = true;
+    if ((a.description || '') !== (b.description || '')) itemDescChanged = true;
+  }
+  if (nameChanged) changes.push('изменено название позиции');
+  if (priceChanged) changes.push('изменена цена');
+  if (qtyChanged) changes.push('изменено количество');
+  if (itemDescChanged) changes.push('изменено описание позиции');
+
+  if ((old.description || '') !== (next.description || '')) {
+    changes.push('изменено описание предложения');
+  }
+
+  if (changes.length === 0) return null;
+
+  const summary = changes.join(', ');
+  return summary.charAt(0).toUpperCase() + summary.slice(1);
+}
+
+/**
  * POST /api/proposals
  * Создание нового коммерческого предложения
  * Требует: JWT auth
@@ -287,32 +333,34 @@ router.put('/:id', authenticateToken, async (req, res, next) => {
     if (value.title !== undefined) proposal.title = value.title;
     if (value.status !== undefined) proposal.status = value.status;
 
-    // Если есть изменения в данных, создаём новую версию
-    let newVersionId = proposal.current_version_id;
+    // Новую версию создаём только если данные реально изменились —
+    // иначе каждое нажатие "Сохранить" плодило бы версии-дубликаты
     if (value.data !== undefined) {
-      // Получаем номер последней версии
-      const nextVersionNumber = (currentVersion?.version_number || 0) + 1;
+      const changeSummary = currentVersion
+        ? diffProposalData(currentVersion.data, value.data)
+        : 'Начальная версия';
 
-      // Вычисляем PDF hash для кэширования
-      const pdfHash = crypto
-        .createHash('sha256')
-        .update(JSON.stringify(value.data))
-        .digest('hex');
+      if (changeSummary) {
+        const nextVersionNumber = (currentVersion?.version_number || 0) + 1;
 
-      // Создаём новую версию
-      const versionId = uuidv4();
-      await ProposalVersion.create({
-        id: versionId,
-        proposal_id: proposal.id,
-        version_number: nextVersionNumber,
-        data: value.data,
-        comment: value.comment || `Версия ${nextVersionNumber}`,
-        changed_by: req.userId,
-        pdf_hash: pdfHash,
-      });
+        const pdfHash = crypto
+          .createHash('sha256')
+          .update(JSON.stringify(value.data))
+          .digest('hex');
 
-      newVersionId = versionId;
-      proposal.current_version_id = versionId;
+        const versionId = uuidv4();
+        await ProposalVersion.create({
+          id: versionId,
+          proposal_id: proposal.id,
+          version_number: nextVersionNumber,
+          data: value.data,
+          comment: value.comment || changeSummary,
+          changed_by: req.userId,
+          pdf_hash: pdfHash,
+        });
+
+        proposal.current_version_id = versionId;
+      }
     }
 
     await proposal.save();
@@ -525,25 +573,10 @@ router.post('/:id/versions/:version_id/restore', authenticateToken, async (req, 
       });
     }
 
-    const lastVersion = await ProposalVersion.findOne({
-      where: { proposal_id: req.params.id },
-      order: [['version_number', 'DESC']],
-    });
-    const nextVersionNumber = (lastVersion?.version_number || 0) + 1;
-    const pdfHash = crypto.createHash('sha256').update(JSON.stringify(version.data)).digest('hex');
-
-    const newVersionId = uuidv4();
-    await ProposalVersion.create({
-      id: newVersionId,
-      proposal_id: proposal.id,
-      version_number: nextVersionNumber,
-      data: version.data,
-      comment: `Восстановлено из версии ${version.version_number}`,
-      changed_by: req.userId,
-      pdf_hash: pdfHash,
-    });
-
-    proposal.current_version_id = newVersionId;
+    // Restore переключает указатель на уже существующую версию, не создавая
+    // новую запись — ничего не теряется (старая версия остаётся в истории),
+    // но список версий не раздувается дублями с одинаковым содержимым.
+    proposal.current_version_id = version.id;
     await proposal.save();
 
     return res.status(200).json({

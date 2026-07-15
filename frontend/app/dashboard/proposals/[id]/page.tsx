@@ -10,6 +10,7 @@ interface ProposalVersion {
   proposal_id: string;
   version_number: number;
   data: Record<string, any>;
+  comment?: string;
   created_at: string;
 }
 
@@ -451,6 +452,7 @@ export default function ProposalEditorPage() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Версия</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Дата</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Изменения</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Действие</th>
                 </tr>
               </thead>
@@ -460,6 +462,9 @@ export default function ProposalEditorPage() {
                     <td className="px-6 py-4 font-medium text-gray-900">v{version.version_number}</td>
                     <td className="px-6 py-4 text-sm text-gray-600">
                       {new Date(version.created_at).toLocaleString('ru-RU')}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-600">
+                      {version.comment || '—'}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <button
