@@ -7,6 +7,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
+const { Op } = require('sequelize');
 const { authenticateToken } = require('../middleware/auth');
 const { proposalSchema, updateProposalSchema } = require('../validators');
 const { Proposal, ProposalVersion, Template, User } = require('../models');
@@ -156,7 +157,7 @@ router.post('/', authenticateToken, async (req, res, next) => {
  * GET /api/proposals
  * Получить список всех активных предложений пользователя
  * Требует: JWT auth
- * Query params: ?limit=10&offset=0&sort=created_at&order=desc&status=draft
+ * Query params: ?limit=10&offset=0&sort=created_at&order=desc&status=draft&search=текст
  */
 router.get('/', authenticateToken, async (req, res, next) => {
   try {
@@ -165,11 +166,15 @@ router.get('/', authenticateToken, async (req, res, next) => {
     const sort = req.query.sort || 'created_at';
     const order = (req.query.order || 'desc').toUpperCase();
     const status = req.query.status; // Опциональный фильтр по статусу
+    const search = req.query.search; // Опциональный поиск по названию
 
     // Строим где условие
     const where = { user_id: req.userId, is_active: true };
     if (status && ['draft', 'final', 'archived'].includes(status)) {
       where.status = status;
+    }
+    if (search) {
+      where.title = { [Op.iLike]: `%${search}%` };
     }
 
     // Получить предложения пользователя
@@ -182,6 +187,10 @@ router.get('/', authenticateToken, async (req, res, next) => {
         {
           association: 'template',
           attributes: ['id', 'name'],
+        },
+        {
+          association: 'currentVersion',
+          attributes: ['data'],
         },
       ],
     });
@@ -196,6 +205,7 @@ router.get('/', authenticateToken, async (req, res, next) => {
           template_id: p.template_id,
           template_name: p.template?.name,
           user_id: p.user_id,
+          data: p.currentVersion?.data || null,
           created_at: p.createdAt,
           updated_at: p.updatedAt,
         })),

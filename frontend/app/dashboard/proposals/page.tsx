@@ -5,10 +5,43 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiClient, Proposal } from '@/lib/api';
 import { authManager } from '@/lib/auth';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
+import { Pagination } from '@/components/ui/Pagination';
+import { Badge, BadgeStatus } from '@/components/ui/Badge';
+import { FilterChips } from '@/components/ui/FilterChips';
+
+const PAGE_SIZE = 10;
+
+const STATUS_LABEL: Record<BadgeStatus, string> = {
+  draft: 'Черновик',
+  final: 'Финальный',
+  archived: 'Архив',
+};
+
+const STATUS_FILTERS: { value: BadgeStatus | ''; label: string }[] = [
+  { value: '', label: 'Все' },
+  { value: 'draft', label: 'Черновики' },
+  { value: 'final', label: 'Финальные' },
+  { value: 'archived', label: 'Архив' },
+];
+
+function proposalTotal(proposal: Proposal): number {
+  return (proposal.data?.items || []).reduce((sum, item) => {
+    const quantity = Number(item.quantity) || 0;
+    const price = Number(item.price) || 0;
+    return sum + quantity * price;
+  }, 0);
+}
 
 export default function ProposalsPage() {
   const router = useRouter();
   const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<BadgeStatus | ''>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -17,15 +50,28 @@ export default function ProposalsPage() {
       router.push('/login');
       return;
     }
-    fetchProposals();
   }, [router]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      fetchProposals();
+    }, 300);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, search, status]);
 
   const fetchProposals = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.getProposals();
+      const response = await apiClient.getProposals({
+        limit: PAGE_SIZE,
+        offset: page * PAGE_SIZE,
+        search,
+        status: status || undefined,
+      });
       if (response.success && response.data?.proposals) {
         setProposals(response.data.proposals);
+        setTotal(response.data.pagination.total);
       } else {
         setError(response.error?.message || 'Не удалось загрузить предложения');
       }
@@ -36,110 +82,119 @@ export default function ProposalsPage() {
     }
   };
 
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setPage(0);
+  };
+
+  const handleStatusChange = (value: BadgeStatus | '') => {
+    setStatus(value);
+    setPage(0);
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Удалить предложение?')) return;
     try {
       await apiClient.deleteProposal(id);
       setProposals(proposals.filter((p) => p.id !== id));
+      setTotal((t) => t - 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка удаления');
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    const badges: Record<string, { bg: string; text: string }> = {
-      draft: { bg: 'bg-gray-100', text: 'text-gray-700' },
-      final: { bg: 'bg-green-100', text: 'text-green-700' },
-      archived: { bg: 'bg-gray-300', text: 'text-gray-700' },
-    };
-    const badge = badges[status] || badges.draft;
+  if (loading && proposals.length === 0) {
     return (
-      <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
-        {status === 'draft' ? 'Черновик' : status === 'final' ? 'Финальный' : 'Архив'}
-      </span>
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="text-center py-12">
-        <div className="inline-block w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-        <p className="text-gray-600 mt-4">Загрузка...</p>
+      <div className="py-12 text-center">
+        <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-line border-t-accent"></div>
+        <p className="mt-4 text-muted">Загрузка...</p>
       </div>
     );
   }
 
   return (
     <div>
-      <div className="mb-8 flex justify-between items-center">
+      <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Предложения</h1>
-          <p className="text-gray-600 mt-1">Управление коммерческими предложениями</p>
+          <h1 className="text-3xl font-bold text-ink">Предложения</h1>
+          <p className="mt-1 text-muted">Управление коммерческими предложениями</p>
         </div>
-        <Link
-          href="/dashboard/proposals/new"
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
-        >
-          + Новое предложение
+        <Link href="/dashboard/proposals/new">
+          <Button variant="primary">+ Новое предложение</Button>
         </Link>
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+        <div className="mb-6 rounded-control border border-danger/20 bg-danger-soft px-4 py-3 text-danger">
           {error}
         </div>
       )}
 
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Input
+          placeholder="Поиск по названию…"
+          value={search}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          className="max-w-xs"
+        />
+        <FilterChips options={STATUS_FILTERS} value={status} onChange={handleStatusChange} />
+      </div>
+
       {proposals.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-          <div className="text-4xl mb-4">📋</div>
-          <p className="text-gray-600 mb-4">У вас пока нет предложений</p>
-          <Link
-            href="/dashboard/proposals/new"
-            className="text-blue-600 hover:text-blue-800 font-medium"
-          >
-            Создать первое предложение
-          </Link>
-        </div>
+        <Card className="p-8 text-center">
+          <div className="mb-4 text-4xl">📋</div>
+          <p className="mb-4 text-muted">
+            {search || status ? 'Ничего не найдено' : 'У вас пока нет предложений'}
+          </p>
+          {!search && !status && (
+            <Link href="/dashboard/proposals/new" className="font-medium text-accent hover:text-accent-hover">
+              Создать первое предложение
+            </Link>
+          )}
+        </Card>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <Card className="overflow-hidden">
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="border-b border-line bg-surface-0">
               <tr>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Название</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Статус</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Создано</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Действия</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-text">Название</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-text">Статус</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-text">Сумма</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-text">Создано</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-text">Действия</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-line">
               {proposals.map((proposal) => (
-                <tr key={proposal.id} className="hover:bg-gray-50 transition">
-                  <td className="px-6 py-4 text-sm text-gray-900 font-medium">{proposal.title}</td>
-                  <td className="px-6 py-4 text-sm">{getStatusBadge(proposal.status)}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
+                <tr key={proposal.id} className="transition-colors hover:bg-surface-0">
+                  <td className="px-6 py-4 text-sm font-medium text-ink">{proposal.title}</td>
+                  <td className="px-6 py-4 text-sm">
+                    <Badge status={proposal.status}>{STATUS_LABEL[proposal.status]}</Badge>
+                  </td>
+                  <td className="px-6 py-4 font-mono text-sm text-text">
+                    {proposalTotal(proposal).toLocaleString('ru-RU', { minimumFractionDigits: 2 })} ₽
+                  </td>
+                  <td className="px-6 py-4 font-mono text-sm text-muted">
                     {new Date(proposal.created_at).toLocaleDateString('ru-RU')}
                   </td>
-                  <td className="px-6 py-4 text-sm space-x-3 flex">
-                    <Link
-                      href={`/dashboard/proposals/${proposal.id}`}
-                      className="text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      Редактировать
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(proposal.id)}
-                      className="text-red-600 hover:text-red-800 font-medium"
-                    >
-                      Удалить
-                    </button>
+                  <td className="px-6 py-4 text-sm">
+                    <div className="flex gap-2">
+                      <Link href={`/dashboard/proposals/${proposal.id}`}>
+                        <Button variant="secondary" className="px-3 py-1.5">Редактировать</Button>
+                      </Link>
+                      <Button variant="danger" className="px-3 py-1.5" onClick={() => handleDelete(proposal.id)}>
+                        Удалить
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
+
+      <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} />
     </div>
   );
 }

@@ -6,6 +6,7 @@
 
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
+const { Op } = require('sequelize');
 const { authenticateToken } = require('../middleware/auth');
 const { templateSchema, updateTemplateSchema } = require('../validators');
 const { Template, User } = require('../models');
@@ -69,7 +70,7 @@ router.post('/', authenticateToken, async (req, res, next) => {
  * GET /api/templates
  * Получить список всех активных шаблонов пользователя
  * Требует: JWT auth
- * Query params: ?limit=10&offset=0&sort=created_at&order=desc
+ * Query params: ?limit=10&offset=0&sort=created_at&order=desc&search=текст
  */
 router.get('/', authenticateToken, async (req, res, next) => {
   try {
@@ -77,13 +78,20 @@ router.get('/', authenticateToken, async (req, res, next) => {
     const offset = parseInt(req.query.offset) || 0;
     const sort = req.query.sort || 'created_at';
     const order = (req.query.order || 'desc').toUpperCase();
+    const search = req.query.search; // Опциональный поиск по названию
+
+    // Строим где условие
+    const where = {
+      created_by: req.userId,
+      is_active: true,
+    };
+    if (search) {
+      where.name = { [Op.iLike]: `%${search}%` };
+    }
 
     // Получить шаблоны пользователя
     const { count, rows } = await Template.findAndCountAll({
-      where: {
-        created_by: req.userId,
-        is_active: true,
-      },
+      where,
       limit,
       offset,
       order: [[sort, order]],

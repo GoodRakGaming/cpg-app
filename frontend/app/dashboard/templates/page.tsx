@@ -5,10 +5,19 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiClient, Template } from '@/lib/api';
 import { authManager } from '@/lib/auth';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Input } from '@/components/ui/Input';
+import { Pagination } from '@/components/ui/Pagination';
+
+const PAGE_SIZE = 10;
 
 export default function TemplatesPage() {
   const router = useRouter();
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -17,15 +26,23 @@ export default function TemplatesPage() {
       router.push('/login');
       return;
     }
-    fetchTemplates();
   }, [router]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      fetchTemplates();
+    }, 300);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, search]);
 
   const fetchTemplates = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.getTemplates();
+      const response = await apiClient.getTemplates({ limit: PAGE_SIZE, offset: page * PAGE_SIZE, search });
       if (response.success && response.data?.templates) {
         setTemplates(response.data.templates);
+        setTotal(response.data.pagination.total);
       } else {
         setError(response.error?.message || 'Не удалось загрузить шаблоны');
       }
@@ -36,100 +53,111 @@ export default function TemplatesPage() {
     }
   };
 
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setPage(0);
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Удалить шаблон? Это не затронет уже созданные предложения.')) return;
     try {
       await apiClient.deleteTemplate(id);
       setTemplates(templates.filter((t) => t.id !== id));
+      setTotal((t) => t - 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка удаления');
     }
   };
 
-  if (loading) {
+  if (loading && templates.length === 0) {
     return (
-      <div className="text-center py-12">
-        <div className="inline-block w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-        <p className="text-gray-600 mt-4">Загрузка...</p>
+      <div className="py-12 text-center">
+        <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-line border-t-accent"></div>
+        <p className="mt-4 text-muted">Загрузка...</p>
       </div>
     );
   }
 
   return (
     <div>
-      <div className="mb-8 flex justify-between items-center">
+      <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Шаблоны</h1>
-          <p className="text-gray-600 mt-1">Управление шаблонами коммерческих предложений</p>
+          <h1 className="text-3xl font-bold text-ink">Шаблоны</h1>
+          <p className="mt-1 text-muted">Управление шаблонами коммерческих предложений</p>
         </div>
-        <Link
-          href="/dashboard/templates/new"
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
-        >
-          + Новый шаблон
+        <Link href="/dashboard/templates/new">
+          <Button variant="primary">+ Новый шаблон</Button>
         </Link>
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+        <div className="mb-6 rounded-control border border-danger/20 bg-danger-soft px-4 py-3 text-danger">
           {error}
         </div>
       )}
 
+      <div className="mb-4">
+        <Input
+          placeholder="Поиск по названию…"
+          value={search}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          className="max-w-xs"
+        />
+      </div>
+
       {templates.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-          <div className="text-4xl mb-4">📄</div>
-          <p className="text-gray-600 mb-4">У вас пока нет шаблонов</p>
-          <Link
-            href="/dashboard/templates/new"
-            className="text-blue-600 hover:text-blue-800 font-medium"
-          >
-            Создать первый шаблон
-          </Link>
-        </div>
+        <Card className="p-8 text-center">
+          <div className="mb-4 text-4xl">📄</div>
+          <p className="mb-4 text-muted">
+            {search ? 'Ничего не найдено' : 'У вас пока нет шаблонов'}
+          </p>
+          {!search && (
+            <Link href="/dashboard/templates/new" className="font-medium text-accent hover:text-accent-hover">
+              Создать первый шаблон
+            </Link>
+          )}
+        </Card>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <Card className="overflow-hidden">
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="border-b border-line bg-surface-0">
               <tr>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Название</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Описание</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Версия</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Создано</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700">Действия</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-text">Название</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-text">Описание</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-text">Версия</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-text">Создано</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-text">Действия</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-line">
               {templates.map((template) => (
-                <tr key={template.id} className="hover:bg-gray-50 transition">
-                  <td className="px-6 py-4 text-sm text-gray-900 font-medium">{template.name}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
-                    {template.description || <span className="text-gray-400 italic">—</span>}
+                <tr key={template.id} className="transition-colors hover:bg-surface-0">
+                  <td className="px-6 py-4 text-sm font-medium text-ink">{template.name}</td>
+                  <td className="px-6 py-4 text-sm text-muted">
+                    {template.description || <span className="italic">—</span>}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">v{template.version}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
+                  <td className="px-6 py-4 font-mono text-sm text-muted">v{template.version}</td>
+                  <td className="px-6 py-4 font-mono text-sm text-muted">
                     {new Date(template.created_at).toLocaleDateString('ru-RU')}
                   </td>
-                  <td className="px-6 py-4 text-sm space-x-3 flex">
-                    <Link
-                      href={`/dashboard/templates/${template.id}`}
-                      className="text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      Редактировать
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(template.id)}
-                      className="text-red-600 hover:text-red-800 font-medium"
-                    >
-                      Удалить
-                    </button>
+                  <td className="px-6 py-4 text-sm">
+                    <div className="flex gap-2">
+                      <Link href={`/dashboard/templates/${template.id}`}>
+                        <Button variant="secondary" className="px-3 py-1.5">Редактировать</Button>
+                      </Link>
+                      <Button variant="danger" className="px-3 py-1.5" onClick={() => handleDelete(template.id)}>
+                        Удалить
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </Card>
       )}
+
+      <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} />
     </div>
   );
 }

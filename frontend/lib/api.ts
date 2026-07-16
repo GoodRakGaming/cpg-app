@@ -271,8 +271,11 @@ class ApiClient {
     });
   }
 
-  async getTemplates(limit: number = 10, offset: number = 0): Promise<ApiResponse<{ templates: Template[]; total: number }>> {
-    return this.request(`/templates?limit=${limit}&offset=${offset}`, { method: 'GET' });
+  async getTemplates(opts: { limit?: number; offset?: number; search?: string } = {}): Promise<ApiResponse<{ templates: Template[]; pagination: { total: number } }>> {
+    const { limit = 10, offset = 0, search } = opts;
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (search) params.set('search', search);
+    return this.request(`/templates?${params.toString()}`, { method: 'GET' });
   }
 
   async getTemplate(id: string): Promise<ApiResponse<{ template: Template }>> {
@@ -298,8 +301,12 @@ class ApiClient {
     });
   }
 
-  async getProposals(limit: number = 10, offset: number = 0): Promise<ApiResponse<{ proposals: Proposal[]; total: number }>> {
-    return this.request(`/proposals?limit=${limit}&offset=${offset}`, { method: 'GET' });
+  async getProposals(opts: { limit?: number; offset?: number; search?: string; status?: 'draft' | 'final' | 'archived' } = {}): Promise<ApiResponse<{ proposals: Proposal[]; pagination: { total: number } }>> {
+    const { limit = 10, offset = 0, search, status } = opts;
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (search) params.set('search', search);
+    if (status) params.set('status', status);
+    return this.request(`/proposals?${params.toString()}`, { method: 'GET' });
   }
 
   async getProposal(id: string): Promise<ApiResponse<{ proposal: Proposal }>> {
