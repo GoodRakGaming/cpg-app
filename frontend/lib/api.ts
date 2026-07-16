@@ -38,12 +38,71 @@ export interface AuthResponse {
   expires_in: string;
 }
 
+export interface Item {
+  name: string;
+  unit: string;
+  quantity: number | '';
+  price: number | '';
+  section?: string;
+}
+
+export interface CompanyBank {
+  account?: string;
+  bankName?: string;
+  bik?: string;
+  corrAccount?: string;
+}
+
+export interface Company {
+  name: string;
+  shortName?: string;
+  logo?: string; // base64 data URL, embedded directly into the template
+  inn?: string;
+  kpp?: string;
+  ogrn?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  bank?: CompanyBank;
+}
+
+export interface Signer {
+  fullName?: string;
+  position?: string;
+  signatureImage?: string; // base64 data URL
+  stampImage?: string; // base64 data URL
+}
+
+export interface TemplateData {
+  company?: Company;
+  signer?: Signer;
+  items?: Item[];
+  terms?: string;
+  footer?: string;
+}
+
+export interface Recipient {
+  position?: string;
+  org?: string;
+  fullName?: string;
+}
+
+export interface ProposalData {
+  number?: string;
+  date?: string;
+  recipient?: Recipient;
+  description?: string;
+  items?: Item[];
+  validDays?: number | '';
+  vatNote?: string;
+}
+
 export interface Template {
   id: string;
   name: string;
   description?: string;
   version: number;
-  data: Record<string, any>;
+  data: TemplateData;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -61,14 +120,14 @@ export interface Proposal {
   created_at: string;
   updated_at: string;
   is_active: boolean;
-  data: Record<string, any>;
+  data: ProposalData;
 }
 
 export interface ProposalVersion {
   id: string;
   proposal_id: string;
   version_number: number;
-  data: Record<string, any>;
+  data: ProposalData;
   comment?: string;
   changed_by: string;
   pdf_hash?: string;

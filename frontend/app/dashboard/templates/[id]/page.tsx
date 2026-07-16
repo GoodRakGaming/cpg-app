@@ -2,21 +2,28 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { apiClient, Template } from '@/lib/api';
+import { apiClient, Template, Item, Company, Signer, TemplateData } from '@/lib/api';
 import Link from 'next/link';
 
-interface Item {
-  name: string;
-  description: string;
-  quantity: number | '';
-  price: number | '';
+const emptyItem = (): Item => ({ name: '', unit: 'шт.', quantity: 1, price: '' });
+
+function itemsFromData(data: TemplateData): Item[] {
+  if (Array.isArray(data?.items) && data.items.length > 0) {
+    return data.items.map((item) => ({ ...item, unit: item.unit || 'шт.' }));
+  }
+  return [emptyItem()];
 }
 
-const emptyItem = (): Item => ({ name: '', description: '', quantity: 1, price: '' });
+const emptyCompany = (): Company => ({ name: '', address: '', inn: '', kpp: '', ogrn: '', phone: '', email: '', bank: {} });
+const emptySigner = (): Signer => ({ fullName: '', position: '' });
 
-function itemsFromData(data: Record<string, any>): Item[] {
-  if (Array.isArray(data?.items) && data.items.length > 0) return data.items;
-  return [emptyItem()];
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function TemplateEditorPage() {
@@ -29,13 +36,14 @@ export default function TemplateEditorPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [items, setItems] = useState<Item[]>([emptyItem()]);
   const [terms, setTerms] = useState('');
   const [footer, setFooter] = useState('');
+  const [company, setCompany] = useState<Company>(emptyCompany());
+  const [signer, setSigner] = useState<Signer>(emptySigner());
 
   useEffect(() => {
     loadTemplate();
@@ -54,6 +62,8 @@ export default function TemplateEditorPage() {
         setItems(itemsFromData(t.data));
         setTerms(t.data?.terms || '');
         setFooter(t.data?.footer || '');
+        setCompany({ ...emptyCompany(), ...(t.data?.company || {}), bank: { ...(t.data?.company?.bank || {}) } });
+        setSigner({ ...emptySigner(), ...(t.data?.signer || {}) });
       } else {
         setError('Шаблон не найден');
       }
@@ -84,6 +94,28 @@ export default function TemplateEditorPage() {
 
   const total = items.reduce((sum, item) => sum + (item.quantity === '' ? 0 : item.quantity) * (item.price === '' ? 0 : item.price), 0);
 
+  const handleLogoUpload = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setCompany((prev) => ({ ...prev, logo: dataUrl }));
+    } catch (err) {
+      setError('Не удалось загрузить логотип');
+      console.error(err);
+    }
+  };
+
+  const handleSignatureUpload = async (field: 'signatureImage' | 'stampImage', file: File | undefined) => {
+    if (!file) return;
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setSigner((prev) => ({ ...prev, [field]: dataUrl }));
+    } catch (err) {
+      setError('Не удалось загрузить изображение');
+      console.error(err);
+    }
+  };
+
   const handleSave = async () => {
     if (!name.trim()) {
       setError('Название не может быть пустым');
@@ -93,13 +125,19 @@ export default function TemplateEditorPage() {
     try {
       setSaving(true);
       setError(null);
-      setSuccess(null);
       const normalizedItems = items.map(item => ({
         ...item,
         quantity: item.quantity === '' ? 1 : item.quantity,
         price: item.price === '' ? 0 : item.price,
       }));
-      const data = { items: normalizedItems, terms, footer };
+      const hasBank = Object.values(company.bank || {}).some((v) => v);
+      const data: TemplateData = {
+        items: normalizedItems,
+        terms,
+        footer,
+        company: company.name.trim() ? { ...company, bank: hasBank ? company.bank : undefined } : undefined,
+        signer: (signer.fullName || signer.position) ? signer : undefined,
+      };
       const response = await apiClient.updateTemplate(id, name.trim(), description.trim(), data);
 
       if (response.success && response.data?.template) {
@@ -175,9 +213,6 @@ export default function TemplateEditorPage() {
       {error && (
         <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">{error}</div>
       )}
-      {success && (
-        <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">{success}</div>
-      )}
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 space-y-6">
         <div>
@@ -204,10 +239,187 @@ export default function TemplateEditorPage() {
           />
         </div>
 
+        {/* Company requisites — юрлицо этого шаблона */}
+        <div className="border-t border-gray-200 pt-6">
+          <h2 className="text-sm font-semibold text-gray-900 mb-1">Реквизиты юрлица</h2>
+          <p className="text-xs text-gray-500 mb-4">Печатаются в шапке PDF. Обязательны для КП: название, адрес, ИНН, контакты.</p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-600 mb-1">Название компании</label>
+              <input
+                type="text"
+                value={company.name}
+                onChange={(e) => setCompany((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="ООО «Профстрой»"
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-600 mb-1">Юридический адрес</label>
+              <input
+                type="text"
+                value={company.address}
+                onChange={(e) => setCompany((prev) => ({ ...prev, address: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">ИНН</label>
+              <input
+                type="text"
+                value={company.inn}
+                onChange={(e) => setCompany((prev) => ({ ...prev, inn: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Телефон</label>
+              <input
+                type="text"
+                value={company.phone}
+                onChange={(e) => setCompany((prev) => ({ ...prev, phone: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-600 mb-1">Email</label>
+              <input
+                type="text"
+                value={company.email}
+                onChange={(e) => setCompany((prev) => ({ ...prev, email: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">ОГРН (опционально)</label>
+              <input
+                type="text"
+                value={company.ogrn}
+                onChange={(e) => setCompany((prev) => ({ ...prev, ogrn: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">КПП (опционально)</label>
+              <input
+                type="text"
+                value={company.kpp}
+                onChange={(e) => setCompany((prev) => ({ ...prev, kpp: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+              />
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-600 mb-1">Логотип (опционально)</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleLogoUpload(e.target.files?.[0])}
+                className="w-full text-sm text-gray-600"
+              />
+              {company.logo && (
+                <img src={company.logo} alt="Логотип" className="mt-2 h-12 object-contain" />
+              )}
+            </div>
+          </div>
+
+          <details className="mt-4">
+            <summary className="text-xs text-gray-600 cursor-pointer select-none">Банковские реквизиты (опционально, показываются только если заполнены)</summary>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-600 mb-1">Банк</label>
+                <input
+                  type="text"
+                  value={company.bank?.bankName || ''}
+                  onChange={(e) => setCompany((prev) => ({ ...prev, bank: { ...prev.bank, bankName: e.target.value } }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Р/с</label>
+                <input
+                  type="text"
+                  value={company.bank?.account || ''}
+                  onChange={(e) => setCompany((prev) => ({ ...prev, bank: { ...prev.bank, account: e.target.value } }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">БИК</label>
+                <input
+                  type="text"
+                  value={company.bank?.bik || ''}
+                  onChange={(e) => setCompany((prev) => ({ ...prev, bank: { ...prev.bank, bik: e.target.value } }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-600 mb-1">К/с</label>
+                <input
+                  type="text"
+                  value={company.bank?.corrAccount || ''}
+                  onChange={(e) => setCompany((prev) => ({ ...prev, bank: { ...prev.bank, corrAccount: e.target.value } }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+                />
+              </div>
+            </div>
+          </details>
+        </div>
+
+        {/* Signer — подписант */}
+        <div className="border-t border-gray-200 pt-6">
+          <h2 className="text-sm font-semibold text-gray-900 mb-1">Подписант</h2>
+          <p className="text-xs text-gray-500 mb-4">
+            ФИО и должность обязательны для строки подписи в PDF. Скан подписи/печати — опционально;
+            без них печать не имитируется, только "м.п." текстом.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Должность</label>
+              <input
+                type="text"
+                value={signer.position}
+                onChange={(e) => setSigner((prev) => ({ ...prev, position: e.target.value }))}
+                placeholder="Директор"
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">ФИО</label>
+              <input
+                type="text"
+                value={signer.fullName}
+                onChange={(e) => setSigner((prev) => ({ ...prev, fullName: e.target.value }))}
+                className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Скан подписи (опционально)</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleSignatureUpload('signatureImage', e.target.files?.[0])}
+                className="w-full text-sm text-gray-600"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Скан печати (опционально)</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleSignatureUpload('stampImage', e.target.files?.[0])}
+                className="w-full text-sm text-gray-600"
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Items */}
-        <div>
+        <div className="border-t border-gray-200 pt-6">
           <div className="flex items-center justify-between mb-3">
-            <label className="block text-sm font-medium text-gray-700">Позиции</label>
+            <label className="block text-sm font-medium text-gray-700">Позиции по умолчанию</label>
             <button
               type="button"
               onClick={addItem}
@@ -231,8 +443,8 @@ export default function TemplateEditorPage() {
                     ×
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="col-span-4">
                     <label className="block text-xs text-gray-600 mb-1">Название</label>
                     <input
                       type="text"
@@ -242,13 +454,13 @@ export default function TemplateEditorPage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
                     />
                   </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs text-gray-600 mb-1">Описание</label>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Ед. изм.</label>
                     <input
                       type="text"
-                      value={item.description}
-                      onChange={(e) => updateItem(index, 'description', e.target.value)}
-                      placeholder="Краткое описание"
+                      value={item.unit}
+                      onChange={(e) => updateItem(index, 'unit', e.target.value)}
+                      placeholder="шт."
                       className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
                     />
                   </div>
@@ -263,7 +475,7 @@ export default function TemplateEditorPage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
                     />
                   </div>
-                  <div>
+                  <div className="col-span-2">
                     <label className="block text-xs text-gray-600 mb-1">Цена (руб.)</label>
                     <input
                       type="number"

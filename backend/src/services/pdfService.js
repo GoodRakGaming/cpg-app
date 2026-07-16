@@ -118,6 +118,180 @@ function calculatePdfHash(pdfBuffer) {
     .digest('hex');
 }
 
+// ─── HTML escaping / formatting helpers ────────────────────────────────────
+
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+function money(n) {
+  return (Number(n) || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatDate(value) {
+  const d = value ? new Date(value) : new Date();
+  if (Number.isNaN(d.getTime())) return esc(value);
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// Multi-line free text (terms/footer/description) may arrive as a string or an
+// array of lines/paragraphs — render either shape as a list of paragraphs.
+function renderTextBlock(value) {
+  if (!value) return '';
+  const lines = Array.isArray(value) ? value : String(value).split('\n');
+  return lines
+    .map((line) => String(line).trim())
+    .filter(Boolean)
+    .map((line) => `<p class="text-block-line">${esc(line)}</p>`)
+    .join('');
+}
+
+function renderCompanyHeader(company, kpNumber) {
+  if (!company || !company.name) return '';
+
+  const logo = company.logo
+    ? `<img class="company-logo" src="${esc(company.logo)}" alt="">`
+    : '';
+
+  const requisiteParts = [
+    company.address ? esc(company.address) : '',
+    company.inn ? `ИНН ${esc(company.inn)}` : '',
+  ].filter(Boolean);
+
+  const contactParts = [
+    company.phone ? esc(company.phone) : '',
+    company.email ? esc(company.email) : '',
+  ].filter(Boolean);
+
+  const extraFields = [
+    company.ogrn ? `ОГРН ${esc(company.ogrn)}` : '',
+    company.kpp ? `КПП ${esc(company.kpp)}` : '',
+  ].filter(Boolean);
+
+  const bank = company.bank || {};
+  const hasBank = bank.account || bank.bankName || bank.bik || bank.corrAccount;
+  const bankParts = hasBank
+    ? [
+        bank.bankName ? esc(bank.bankName) : '',
+        bank.account ? `р/с ${esc(bank.account)}` : '',
+        bank.bik ? `БИК ${esc(bank.bik)}` : '',
+        bank.corrAccount ? `к/с ${esc(bank.corrAccount)}` : '',
+      ].filter(Boolean)
+    : [];
+
+  return `
+  <header class="doc-header">
+    <div class="doc-header-main">
+      ${logo}
+      <div class="company-block">
+        <div class="company-name">${esc(company.name)}</div>
+        ${requisiteParts.length ? `<div class="company-requisites">${requisiteParts.join(', ')}</div>` : ''}
+        ${contactParts.length ? `<div class="company-requisites">${contactParts.join(' · ')}</div>` : ''}
+      </div>
+    </div>
+    ${kpNumber ? `<div class="doc-header-kp">${esc(kpNumber)}</div>` : ''}
+  </header>
+  ${(extraFields.length || bankParts.length) ? `
+  <div class="company-extra">
+    ${extraFields.length ? `<span>${extraFields.join(', ')}</span>` : ''}
+    ${bankParts.length ? `<span>${bankParts.join(', ')}</span>` : ''}
+  </div>` : ''}`;
+}
+
+function renderRecipient(recipient) {
+  if (!recipient || (!recipient.org && !recipient.fullName)) return '';
+  const lines = [
+    recipient.position ? esc(recipient.position) : '',
+    recipient.org ? esc(recipient.org) : '',
+    recipient.fullName ? esc(recipient.fullName) : '',
+  ].filter(Boolean);
+  if (!lines.length) return '';
+  return `
+  <div class="recipient-block">
+    ${lines.map((l) => `<div>${l}</div>`).join('')}
+  </div>`;
+}
+
+function renderItemsTable(items) {
+  if (!Array.isArray(items) || items.length === 0) return '';
+
+  const hasSections = items.some((item) => item.section);
+  let rows = '';
+  let grandTotal = 0;
+  let currentSection = undefined;
+  let index = 0;
+
+  for (const item of items) {
+    const quantity = Number(item.quantity) || 1;
+    const price = Number(item.price) || 0;
+    const lineTotal = quantity * price;
+    grandTotal += lineTotal;
+
+    if (hasSections && item.section && item.section !== currentSection) {
+      currentSection = item.section;
+      rows += `
+          <tr class="section-row">
+            <td colspan="6">${esc(currentSection)}</td>
+          </tr>`;
+      index = 0;
+    }
+    index += 1;
+
+    rows += `
+          <tr>
+            <td class="col-num">${index}</td>
+            <td>${esc(item.name)}</td>
+            <td class="col-unit">${esc(item.unit || '')}</td>
+            <td class="col-num">${quantity}</td>
+            <td class="col-money">${money(price)}</td>
+            <td class="col-money">${money(lineTotal)}</td>
+          </tr>`;
+  }
+
+  return `
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th class="col-num">№</th>
+        <th>Наименование</th>
+        <th class="col-unit">Ед.</th>
+        <th class="col-num">Кол-во</th>
+        <th class="col-money">Цена</th>
+        <th class="col-money">Сумма</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+      <tr class="total-row">
+        <td colspan="5">Итого</td>
+        <td class="col-money">${money(grandTotal)} ₽</td>
+      </tr>
+    </tbody>
+  </table>`;
+}
+
+function renderSignature(signer) {
+  if (!signer || (!signer.fullName && !signer.position)) return '';
+
+  const signatureImage = signer.signatureImage
+    ? `<img class="signature-image" src="${esc(signer.signatureImage)}" alt="">`
+    : '';
+  const stampImage = signer.stampImage
+    ? `<img class="stamp-image" src="${esc(signer.stampImage)}" alt="">`
+    : (!signer.signatureImage ? '<span class="stamp-placeholder">м.п.</span>' : '');
+
+  return `
+  <div class="signature-block">
+    <div class="signature-line">
+      <span class="signature-position">${esc(signer.position || '')}</span>
+      <span class="signature-visual">${signatureImage}${stampImage}</span>
+      <span class="signature-name">${esc(signer.fullName || '')}</span>
+    </div>
+  </div>`;
+}
+
 /**
  * Generate HTML for proposal
  * @param {Object} proposal - Proposal data
@@ -136,240 +310,186 @@ function generateProposalHtml(proposal, template) {
     ? JSON.parse(rawProposalData)
     : rawProposalData || {};
 
-  // Build HTML content
+  const displayItems = (Array.isArray(proposalData.items) && proposalData.items.length > 0)
+    ? proposalData.items
+    : (Array.isArray(templateData.items) ? templateData.items : []);
+
+  const kpNumber = proposalData.number ? `КП № ${proposalData.number}` : '';
+  const kpDate = formatDate(proposalData.date);
+
   const html = `
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${proposal.title}</title>
+  <title>${esc(proposal.title)}</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
+    :root {
+      --ink: oklch(20% 0.02 260);
+      --text: oklch(30% 0.015 260);
+      --muted: oklch(55% 0.01 260);
+      --line: oklch(90% 0.005 260);
+      --accent: oklch(45% 0.12 250);
+      --accent-soft: oklch(95% 0.02 250);
     }
-    
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      line-height: 1.6;
-      color: #333;
+      font-family: 'Inter', 'DejaVu Sans', Arial, Helvetica, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.5;
+      color: var(--text);
       background: #fff;
     }
-    
-    .container {
-      max-width: 210mm;
-      margin: 0 auto;
-      padding: 20mm;
-      background: white;
+
+    .page {
+      width: 210mm;
+      padding: 20mm 18mm;
     }
-    
-    .header {
-      border-bottom: 3px solid #2c3e50;
-      padding-bottom: 20px;
-      margin-bottom: 30px;
+
+    /* ── header ── */
+    .doc-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8mm;
+      padding-bottom: 4mm;
+      border-bottom: 1px solid var(--line);
     }
-    
-    .header h1 {
-      color: #2c3e50;
-      font-size: 28px;
-      margin-bottom: 10px;
+    .doc-header-main { display: flex; align-items: center; gap: 5mm; }
+    .company-logo { max-height: 28mm; max-width: 45mm; object-fit: contain; }
+    .company-name { font-size: 11pt; font-weight: 700; color: var(--ink); }
+    .company-requisites { font-size: 8pt; color: var(--muted); margin-top: 1mm; }
+    .doc-header-kp { font-size: 9pt; color: var(--muted); white-space: nowrap; }
+    .company-extra {
+      display: flex;
+      gap: 6mm;
+      font-size: 7.5pt;
+      color: var(--muted);
+      margin-top: 2mm;
+      flex-wrap: wrap;
     }
-    
-    .header .subtitle {
-      color: #7f8c8d;
-      font-size: 14px;
+
+    /* ── recipient / title ── */
+    .recipient-block {
+      margin-top: 8mm;
+      font-size: 9.5pt;
+      color: var(--text);
+      text-align: right;
     }
-    
-    .status-badge {
-      display: inline-block;
-      padding: 5px 10px;
-      border-radius: 4px;
-      font-size: 12px;
-      font-weight: bold;
-      margin-top: 10px;
+    .doc-title {
+      margin-top: 8mm;
+      font-size: 15pt;
+      font-weight: 700;
+      color: var(--ink);
     }
-    
-    .status-draft {
-      background-color: #f39c12;
-      color: white;
-    }
-    
-    .status-final {
-      background-color: #27ae60;
-      color: white;
-    }
-    
-    .status-archived {
-      background-color: #95a5a6;
-      color: white;
-    }
-    
-    .section {
-      margin-bottom: 30px;
-    }
-    
-    .section h2 {
-      color: #2c3e50;
-      font-size: 16px;
-      border-bottom: 2px solid #ecf0f1;
-      padding-bottom: 10px;
-      margin-bottom: 15px;
-    }
-    
-    .section-content {
-      color: #555;
-      line-height: 1.8;
-    }
-    
-    .details-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      margin-bottom: 20px;
-    }
-    
-    .detail-item {
-      background: #f8f9fa;
-      padding: 15px;
-      border-radius: 4px;
-    }
-    
-    .detail-label {
-      font-weight: bold;
-      color: #2c3e50;
-      font-size: 12px;
-      text-transform: uppercase;
-      margin-bottom: 5px;
-    }
-    
-    .detail-value {
-      color: #555;
-      font-size: 14px;
-    }
-    
+    .doc-meta { font-size: 8.5pt; color: var(--muted); margin-top: 1mm; }
+    .text-block-line { margin-top: 3mm; color: var(--text); }
+
+    /* ── items table ── */
     .items-table {
       width: 100%;
       border-collapse: collapse;
-      margin: 20px 0;
+      margin-top: 8mm;
+      font-size: 9.5pt;
     }
-    
     .items-table th {
-      background-color: #2c3e50;
-      color: white;
-      padding: 12px;
       text-align: left;
-      font-weight: bold;
+      font-weight: 700;
+      color: var(--muted);
+      font-size: 8pt;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      padding: 2.5mm 3mm;
+      border-bottom: 1px solid var(--ink);
     }
-    
     .items-table td {
-      padding: 10px 12px;
-      border-bottom: 1px solid #ecf0f1;
+      padding: 2.5mm 3mm;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
     }
-    
-    .items-table tr:nth-child(even) {
-      background-color: #f8f9fa;
+    .items-table .col-num { width: 8mm; text-align: center; color: var(--muted); }
+    .items-table .col-unit { width: 16mm; text-align: center; }
+    .items-table .col-money { width: 30mm; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .items-table .section-row td {
+      padding-top: 5mm;
+      font-weight: 700;
+      color: var(--accent);
+      border-bottom: none;
     }
-    
-    .total-row {
-      background-color: #ecf0f1;
-      font-weight: bold;
+    .items-table .total-row td {
+      border-bottom: none;
+      border-top: 1px solid var(--ink);
+      font-weight: 700;
+      color: var(--ink);
+      padding-top: 3.5mm;
     }
-    
-    .footer {
-      margin-top: 40px;
-      padding-top: 20px;
-      border-top: 1px solid #ecf0f1;
-      color: #7f8c8d;
-      font-size: 12px;
-      text-align: center;
+
+    /* ── terms ── */
+    .section { margin-top: 8mm; }
+    .section-title {
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: var(--ink);
+      margin-bottom: 2mm;
     }
-    
-    .template-content {
-      margin: 20px 0;
-      padding: 15px;
-      background: #f8f9fa;
-      border-left: 4px solid #2c3e50;
+
+    /* ── signature ── */
+    .signature-block { margin-top: 14mm; }
+    .signature-line {
+      display: flex;
+      align-items: flex-end;
+      gap: 4mm;
+      border-bottom: 1px solid var(--ink);
+      padding-bottom: 1.5mm;
+    }
+    .signature-position { font-size: 9.5pt; color: var(--text); white-space: nowrap; }
+    .signature-visual {
+      flex: 1;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      min-height: 12mm;
+    }
+    .signature-image { max-height: 14mm; max-width: 45mm; object-fit: contain; }
+    .stamp-image { max-height: 22mm; max-width: 22mm; object-fit: contain; opacity: 0.85; }
+    .stamp-placeholder { font-size: 8pt; color: var(--muted); }
+    .signature-name { font-size: 9.5pt; color: var(--text); white-space: nowrap; }
+
+    /* ── footer ── */
+    .doc-footer {
+      margin-top: 10mm;
+      padding-top: 3mm;
+      border-top: 1px solid var(--line);
+      font-size: 7.5pt;
+      color: var(--muted);
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>${proposal.title}</h1>
-      <p class="subtitle">${template.name || 'Commercial Proposal'}</p>
-      <span class="status-badge status-${proposal.status}">
-        ${proposal.status.toUpperCase()}
-      </span>
-    </div>
-    
-    ${proposalData.description ? `
-    <div class="section">
-      <h2>Description</h2>
-      <div class="section-content">
-        ${proposalData.description}
-      </div>
-    </div>
-    ` : ''}
-    
-    ${(() => {
-      const displayItems = (Array.isArray(proposalData.items) && proposalData.items.length > 0)
-        ? proposalData.items
-        : (Array.isArray(templateData.items) ? templateData.items : []);
-      if (displayItems.length === 0) return '';
-      return `
-    <div class="section">
-      <h2>Items</h2>
-      <table class="items-table">
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th>Description</th>
-            <th>Quantity</th>
-            <th>Price</th>
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${displayItems.map(item => `
-            <tr>
-              <td>${item.name || ''}</td>
-              <td>${item.description || ''}</td>
-              <td>${item.quantity || 1}</td>
-              <td>${(item.price || 0).toLocaleString('ru-RU')} руб.</td>
-              <td>${((item.quantity || 1) * (item.price || 0)).toLocaleString('ru-RU')} руб.</td>
-            </tr>
-          `).join('')}
-          <tr class="total-row">
-            <td colspan="4">ИТОГО</td>
-            <td>${displayItems.reduce((sum, item) => {
-              return sum + ((item.quantity || 1) * (item.price || 0));
-            }, 0).toLocaleString('ru-RU')} руб.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>`;
-    })()}
-    
+  <div class="page">
+    ${renderCompanyHeader(templateData.company, kpNumber)}
+    ${renderRecipient(proposalData.recipient)}
+
+    <h1 class="doc-title">${esc(proposal.title)}</h1>
+    <div class="doc-meta">${kpDate}${proposalData.validDays ? ` · действительно ${esc(proposalData.validDays)} дн.` : ''}</div>
+
+    ${proposalData.description ? `<div class="section">${renderTextBlock(proposalData.description)}</div>` : ''}
+
+    ${renderItemsTable(displayItems)}
+
+    ${proposalData.vatNote ? `<div class="doc-meta" style="margin-top:2mm;">${esc(proposalData.vatNote)}</div>` : ''}
+
     ${templateData.terms ? `
     <div class="section">
-      <h2>Terms & Conditions</h2>
-      <div class="section-content">
-        ${templateData.terms}
-      </div>
-    </div>
-    ` : ''}
-    
-    ${templateData.footer ? `
-    <div class="footer">
-      <p>${templateData.footer}</p>
-    </div>
-    ` : `
-    <div class="footer">
-      <p>${new Date().toLocaleDateString('ru-RU')}</p>
-    </div>
-    `}
+      <div class="section-title">Условия</div>
+      ${renderTextBlock(templateData.terms)}
+    </div>` : ''}
+
+    ${renderSignature(templateData.signer)}
+
+    <div class="doc-footer">${templateData.footer ? esc(templateData.footer) : `Документ сформирован ${formatDate()}`}</div>
   </div>
 </body>
 </html>

@@ -2,17 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiClient } from '@/lib/api';
+import { apiClient, Item } from '@/lib/api';
 import Link from 'next/link';
 
-interface Item {
-  name: string;
-  description: string;
-  quantity: number | '';
-  price: number | '';
-}
-
-const emptyItem = (): Item => ({ name: '', description: '', quantity: 1, price: '' });
+const emptyItem = (): Item => ({ name: '', unit: 'шт.', quantity: 1, price: '' });
 
 export default function NewTemplatePage() {
   const router = useRouter();
@@ -145,8 +138,8 @@ export default function NewTemplatePage() {
                       ×
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="col-span-2">
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="col-span-4">
                       <label className="block text-xs text-gray-600 mb-1">Название</label>
                       <input
                         type="text"
@@ -156,13 +149,13 @@ export default function NewTemplatePage() {
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
                       />
                     </div>
-                    <div className="col-span-2">
-                      <label className="block text-xs text-gray-600 mb-1">Описание</label>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Ед. изм.</label>
                       <input
                         type="text"
-                        value={item.description}
-                        onChange={(e) => updateItem(index, 'description', e.target.value)}
-                        placeholder="Краткое описание"
+                        value={item.unit}
+                        onChange={(e) => updateItem(index, 'unit', e.target.value)}
+                        placeholder="шт."
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
                       />
                     </div>
@@ -177,7 +170,7 @@ export default function NewTemplatePage() {
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
                       />
                     </div>
-                    <div>
+                    <div className="col-span-2">
                       <label className="block text-xs text-gray-600 mb-1">Цена (руб.)</label>
                       <input
                         type="number"

@@ -2,26 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { apiClient, Proposal, API_BASE_URL } from '@/lib/api';
+import { apiClient, Proposal, ProposalVersion, Item, Recipient, API_BASE_URL } from '@/lib/api';
 import Link from 'next/link';
 
-interface ProposalVersion {
-  id: string;
-  proposal_id: string;
-  version_number: number;
-  data: Record<string, any>;
-  comment?: string;
-  created_at: string;
-}
-
-interface Item {
-  name: string;
-  description: string;
-  quantity: number | '';
-  price: number | '';
-}
-
-const emptyItem = (): Item => ({ name: '', description: '', quantity: 1, price: '' });
+const emptyItem = (): Item => ({ name: '', unit: 'шт.', quantity: 1, price: '' });
+const emptyRecipient = (): Recipient => ({ position: '', org: '', fullName: '' });
 
 export default function ProposalEditorPage() {
   const params = useParams();
@@ -38,6 +23,11 @@ export default function ProposalEditorPage() {
   const [status, setStatus] = useState<'draft' | 'final' | 'archived'>('draft');
   const [description, setDescription] = useState('');
   const [items, setItems] = useState<Item[]>([]);
+  const [kpNumber, setKpNumber] = useState('');
+  const [kpDate, setKpDate] = useState('');
+  const [recipient, setRecipient] = useState<Recipient>(emptyRecipient());
+  const [validDays, setValidDays] = useState<number | ''>('');
+  const [vatNote, setVatNote] = useState('');
 
   const [activeTab, setActiveTab] = useState<'content' | 'versions' | 'pdf'>('content');
   const [versions, setVersions] = useState<ProposalVersion[]>([]);
@@ -64,7 +54,16 @@ export default function ProposalEditorPage() {
     setTitle(p.title);
     setStatus(p.status);
     setDescription(p.data?.description || '');
-    setItems(Array.isArray(p.data?.items) && p.data.items.length > 0 ? p.data.items : [emptyItem()]);
+    setItems(
+      Array.isArray(p.data?.items) && p.data.items.length > 0
+        ? p.data.items.map((item) => ({ ...item, unit: item.unit || 'шт.' }))
+        : [emptyItem()]
+    );
+    setKpNumber(p.data?.number || '');
+    setKpDate(p.data?.date || '');
+    setRecipient({ ...emptyRecipient(), ...(p.data?.recipient || {}) });
+    setValidDays(p.data?.validDays ?? '');
+    setVatNote(p.data?.vatNote || '');
   };
 
   const loadProposal = async () => {
@@ -131,7 +130,16 @@ export default function ProposalEditorPage() {
       const response = await apiClient.updateProposal(id, {
         title,
         status,
-        data: { ...(proposal?.data || {}), description, items: normalizedItems },
+        data: {
+          ...(proposal?.data || {}),
+          description,
+          items: normalizedItems,
+          number: kpNumber || undefined,
+          date: kpDate || undefined,
+          recipient: (recipient.org || recipient.fullName) ? recipient : undefined,
+          validDays: validDays === '' ? undefined : validDays,
+          vatNote: vatNote || undefined,
+        },
       });
       if (response.success && response.data?.proposal) {
         setSuccess('Предложение сохранено');
@@ -338,6 +346,79 @@ export default function ProposalEditorPage() {
             />
           </div>
 
+          {/* КП meta: номер/дата/срок действия */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Номер КП</label>
+              <input
+                type="text"
+                value={kpNumber}
+                onChange={(e) => setKpNumber(e.target.value)}
+                placeholder="2026-014"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Дата КП</label>
+              <input
+                type="date"
+                value={kpDate}
+                onChange={(e) => setKpDate(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Действительно, дн.</label>
+              <input
+                type="number"
+                min={0}
+                value={validDays}
+                onChange={(e) => setValidDays(e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder="14"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Получатель */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Получатель</label>
+            <div className="grid grid-cols-3 gap-3">
+              <input
+                type="text"
+                value={recipient.org}
+                onChange={(e) => setRecipient((prev) => ({ ...prev, org: e.target.value }))}
+                placeholder="Организация"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+              />
+              <input
+                type="text"
+                value={recipient.position}
+                onChange={(e) => setRecipient((prev) => ({ ...prev, position: e.target.value }))}
+                placeholder="Должность"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+              />
+              <input
+                type="text"
+                value={recipient.fullName}
+                onChange={(e) => setRecipient((prev) => ({ ...prev, fullName: e.target.value }))}
+                placeholder="ФИО"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Примечание об НДС (опционально)</label>
+            <input
+              type="text"
+              value={vatNote}
+              onChange={(e) => setVatNote(e.target.value)}
+              placeholder="Например: Без НДС (УСН)"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none"
+            />
+          </div>
+
           {/* Items */}
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -365,8 +446,8 @@ export default function ProposalEditorPage() {
                       ×
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="col-span-2">
+                  <div className="grid grid-cols-4 gap-3">
+                    <div className="col-span-4">
                       <label className="block text-xs text-gray-600 mb-1">Название</label>
                       <input
                         type="text"
@@ -377,12 +458,22 @@ export default function ProposalEditorPage() {
                       />
                     </div>
                     <div className="col-span-2">
-                      <label className="block text-xs text-gray-600 mb-1">Описание</label>
+                      <label className="block text-xs text-gray-600 mb-1">Раздел (опционально)</label>
                       <input
                         type="text"
-                        value={item.description}
-                        onChange={(e) => updateItem(index, 'description', e.target.value)}
-                        placeholder="Краткое описание"
+                        value={item.section || ''}
+                        onChange={(e) => updateItem(index, 'section', e.target.value)}
+                        placeholder="Например: Кухня"
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Ед. изм.</label>
+                      <input
+                        type="text"
+                        value={item.unit}
+                        onChange={(e) => updateItem(index, 'unit', e.target.value)}
+                        placeholder="шт."
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
                       />
                     </div>
@@ -397,7 +488,7 @@ export default function ProposalEditorPage() {
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-600 focus:border-transparent text-gray-900 outline-none text-sm"
                       />
                     </div>
-                    <div>
+                    <div className="col-span-2">
                       <label className="block text-xs text-gray-600 mb-1">Цена (руб.)</label>
                       <input
                         type="number"
