@@ -1,5 +1,6 @@
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { ItemsEditor } from '@/components/shared/ItemsEditor';
 import { TemplateForm } from '@/lib/useTemplateForm';
 
 const FILE_INPUT_CLASS =
@@ -28,7 +29,7 @@ export function TemplateFormSections({ form, itemsLabel = 'Позиции' }: { 
   const {
     name, setName,
     description, setDescription,
-    items, updateItem, blurNumeric, addItem, removeItem, total,
+    itemsState,
     terms, setTerms,
     footer, setFooter,
     company, setCompany,
@@ -186,68 +187,7 @@ export function TemplateFormSections({ form, itemsLabel = 'Позиции' }: { 
       </Card>
 
       {/* Позиции */}
-      <Card className="overflow-hidden">
-        <div className="flex items-center justify-between border-b border-line px-5 py-4">
-          <div className="text-sm font-bold text-ink">{itemsLabel}</div>
-          <button type="button" onClick={addItem} className="text-sm font-semibold text-accent hover:text-accent-hover">
-            + Добавить позицию
-          </button>
-        </div>
-        <div className="flex flex-col gap-3 p-5">
-          {items.map((item, index) => (
-            <div key={index} className="rounded-nested border border-line bg-surface-0 p-4">
-              <div className="mb-3 flex items-start justify-between gap-2">
-                <span className="mt-2 text-xs font-medium text-muted">#{index + 1}</span>
-                <button
-                  type="button"
-                  onClick={() => removeItem(index)}
-                  disabled={items.length === 1}
-                  className="text-lg leading-none text-danger/60 hover:text-danger disabled:opacity-30"
-                >
-                  ×
-                </button>
-              </div>
-              <div className="grid grid-cols-4 gap-3">
-                <div className="col-span-4">
-                  <Field label="Название">
-                    <Input
-                      value={item.name}
-                      onChange={(e) => updateItem(index, 'name', e.target.value)}
-                      placeholder="Название услуги или товара"
-                    />
-                  </Field>
-                </div>
-                <Field label="Ед. изм.">
-                  <Input value={item.unit} onChange={(e) => updateItem(index, 'unit', e.target.value)} placeholder="шт." />
-                </Field>
-                <Field label="Количество">
-                  <Input
-                    type="number"
-                    min={1}
-                    value={item.quantity}
-                    onChange={(e) => updateItem(index, 'quantity', e.target.value === '' ? '' : Number(e.target.value))}
-                    onBlur={() => blurNumeric(index, 'quantity', 1)}
-                  />
-                </Field>
-                <div className="col-span-2">
-                  <Field label="Цена (руб.)">
-                    <Input
-                      type="number"
-                      min={0}
-                      value={item.price}
-                      onChange={(e) => updateItem(index, 'price', e.target.value === '' ? '' : Number(e.target.value))}
-                      onBlur={() => blurNumeric(index, 'price', 0)}
-                    />
-                  </Field>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="border-t border-line px-5 py-3 text-right text-sm font-medium text-text">
-          Итого: <span className="font-mono text-accent">{total.toLocaleString('ru-RU')} руб.</span>
-        </div>
-      </Card>
+      <ItemsEditor state={itemsState} label={itemsLabel} />
 
       {/* Условия и футер */}
       <Card className="overflow-hidden">

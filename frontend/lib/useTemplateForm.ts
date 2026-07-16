@@ -1,16 +1,9 @@
 import { useCallback, useState } from 'react';
-import { Company, Item, Signer, Template, TemplateData } from '@/lib/api';
+import { Company, Signer, Template, TemplateData } from '@/lib/api';
+import { itemsFromArray, useItems } from '@/lib/useItems';
 
-export const emptyItem = (): Item => ({ name: '', unit: 'шт.', quantity: 1, price: '' });
 const emptyCompany = (): Company => ({ name: '', address: '', inn: '', kpp: '', ogrn: '', phone: '', email: '', bank: {} });
 const emptySigner = (): Signer => ({ fullName: '', position: '' });
-
-function itemsFromData(data?: TemplateData): Item[] {
-  if (data && Array.isArray(data.items) && data.items.length > 0) {
-    return data.items.map((item) => ({ ...item, unit: item.unit || 'шт.' }));
-  }
-  return [emptyItem()];
-}
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -24,7 +17,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 export function useTemplateForm() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [items, setItems] = useState<Item[]>([emptyItem()]);
+  const itemsState = useItems();
   const [terms, setTerms] = useState('');
   const [footer, setFooter] = useState('');
   const [company, setCompany] = useState<Company>(emptyCompany());
@@ -34,31 +27,13 @@ export function useTemplateForm() {
   const loadFrom = useCallback((template: Template) => {
     setName(template.name);
     setDescription(template.description || '');
-    setItems(itemsFromData(template.data));
+    itemsState.setItems(itemsFromArray(template.data?.items));
     setTerms(template.data?.terms || '');
     setFooter(template.data?.footer || '');
     setCompany({ ...emptyCompany(), ...(template.data?.company || {}), bank: { ...(template.data?.company?.bank || {}) } });
     setSigner({ ...emptySigner(), ...(template.data?.signer || {}) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const updateItem = (index: number, field: keyof Item, value: string | number | '') => {
-    setItems((prev) => prev.map((item, i) => (i === index ? { ...item, [field]: value } : item)));
-  };
-
-  const blurNumeric = (index: number, field: 'price' | 'quantity', fallback: number) => {
-    setItems((prev) => prev.map((item, i) => (i === index && item[field] === '' ? { ...item, [field]: fallback } : item)));
-  };
-
-  const addItem = () => setItems((prev) => [...prev, emptyItem()]);
-
-  const removeItem = (index: number) => {
-    setItems((prev) => (prev.length === 1 ? prev : prev.filter((_, i) => i !== index)));
-  };
-
-  const total = items.reduce(
-    (sum, item) => sum + (item.quantity === '' ? 0 : item.quantity) * (item.price === '' ? 0 : item.price),
-    0
-  );
 
   const handleLogoUpload = async (file: File | undefined) => {
     if (!file) return;
@@ -83,14 +58,9 @@ export function useTemplateForm() {
   };
 
   const buildData = (): TemplateData => {
-    const normalizedItems = items.map((item) => ({
-      ...item,
-      quantity: item.quantity === '' ? 1 : item.quantity,
-      price: item.price === '' ? 0 : item.price,
-    }));
     const hasBank = Object.values(company.bank || {}).some((v) => v);
     return {
-      items: normalizedItems,
+      items: itemsState.normalized(),
       terms,
       footer,
       company: company.name.trim() ? { ...company, bank: hasBank ? company.bank : undefined } : undefined,
@@ -103,12 +73,7 @@ export function useTemplateForm() {
     setName,
     description,
     setDescription,
-    items,
-    updateItem,
-    blurNumeric,
-    addItem,
-    removeItem,
-    total,
+    itemsState,
     terms,
     setTerms,
     footer,
