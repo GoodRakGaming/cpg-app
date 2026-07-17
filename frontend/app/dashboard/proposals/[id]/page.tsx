@@ -94,7 +94,7 @@ export default function ProposalEditorPage() {
         data: form.buildData(proposal?.data),
       });
       if (response.success && response.data?.proposal) {
-        setProposal(response.data.proposal);
+        setProposal((prev) => (prev ? { ...prev, ...response.data!.proposal } : response.data!.proposal));
         setSavedAt(new Date());
         handlePreviewPDF();
       } else {
@@ -166,7 +166,7 @@ export default function ProposalEditorPage() {
       setError(null);
       const response = await apiClient.restoreProposalVersion(id, versionId);
       if (response.success && response.data?.proposal) {
-        setProposal(response.data.proposal);
+        setProposal((prev) => (prev ? { ...prev, ...response.data!.proposal } : response.data!.proposal));
         form.loadFrom(response.data.proposal);
         setVersionsOpen(false);
         setVersions([]);
