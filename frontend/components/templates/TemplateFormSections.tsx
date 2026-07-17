@@ -1,11 +1,8 @@
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { ItemsEditor } from '@/components/shared/ItemsEditor';
+import { FileUploadField } from '@/components/shared/FileUploadField';
 import { TemplateForm } from '@/lib/useTemplateForm';
-
-const FILE_INPUT_CLASS =
-  'w-full text-sm text-muted file:mr-3 file:cursor-pointer file:rounded-control file:border file:border-line ' +
-  'file:bg-surface-0 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-text hover:file:bg-surface-1';
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
@@ -22,14 +19,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <label className="mb-1 block text-xs text-muted">{label}</label>
       {children}
     </div>
-  );
-}
-
-function RemoveFileLink({ onClick }: { onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className="mt-1.5 block text-xs font-medium text-danger hover:text-danger/80">
-      Отменить выбор
-    </button>
   );
 }
 
@@ -110,18 +99,7 @@ export function TemplateFormSections({ form, itemsLabel = 'Позиции' }: { 
           </Field>
           <div className="sm:col-span-2">
             <Field label="Логотип (опционально)">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => handleLogoUpload(e.target.files?.[0])}
-                className={FILE_INPUT_CLASS}
-              />
-              {company.logo && (
-                <>
-                  <img src={company.logo} alt="Логотип" className="mt-2 h-12 object-contain" />
-                  <RemoveFileLink onClick={handleRemoveLogo} />
-                </>
-              )}
+              <FileUploadField value={company.logo} onSelect={handleLogoUpload} onRemove={handleRemoveLogo} alt="Логотип" />
             </Field>
           </div>
         </div>
@@ -181,34 +159,20 @@ export function TemplateFormSections({ form, itemsLabel = 'Позиции' }: { 
             <Input value={signer.fullName} onChange={(e) => setSigner((prev) => ({ ...prev, fullName: e.target.value }))} />
           </Field>
           <Field label="Скан подписи (опционально)">
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => handleSignatureUpload('signatureImage', e.target.files?.[0])}
-              className={FILE_INPUT_CLASS}
+            <FileUploadField
+              value={signer.signatureImage}
+              onSelect={(file) => handleSignatureUpload('signatureImage', file)}
+              onRemove={handleRemoveSignature}
+              alt="Скан подписи"
             />
-            {signer.signatureImage && (
-              <>
-                <img src={signer.signatureImage} alt="Скан подписи" className="mt-2 h-10 object-contain" />
-                <p className="mt-1 text-xs text-muted">Файл уже загружен ранее</p>
-                <RemoveFileLink onClick={handleRemoveSignature} />
-              </>
-            )}
           </Field>
           <Field label="Скан печати (опционально)">
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => handleSignatureUpload('stampImage', e.target.files?.[0])}
-              className={FILE_INPUT_CLASS}
+            <FileUploadField
+              value={signer.stampImage}
+              onSelect={(file) => handleSignatureUpload('stampImage', file)}
+              onRemove={handleRemoveStamp}
+              alt="Скан печати"
             />
-            {signer.stampImage && (
-              <>
-                <img src={signer.stampImage} alt="Скан печати" className="mt-2 h-10 object-contain" />
-                <p className="mt-1 text-xs text-muted">Файл уже загружен ранее</p>
-                <RemoveFileLink onClick={handleRemoveStamp} />
-              </>
-            )}
           </Field>
         </div>
       </Card>
