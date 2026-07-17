@@ -37,6 +37,7 @@ function diffProposalData(oldData, newData) {
   let priceChanged = false;
   let qtyChanged = false;
   let itemDescChanged = false;
+  let sectionChanged = false;
   for (let i = 0; i < commonLength; i++) {
     const a = oldItems[i] || {};
     const b = newItems[i] || {};
@@ -44,11 +45,13 @@ function diffProposalData(oldData, newData) {
     if (Number(a.price) !== Number(b.price)) priceChanged = true;
     if (Number(a.quantity) !== Number(b.quantity)) qtyChanged = true;
     if ((a.description || '') !== (b.description || '')) itemDescChanged = true;
+    if ((a.section || '') !== (b.section || '')) sectionChanged = true;
   }
   if (nameChanged) changes.push('изменено название позиции');
   if (priceChanged) changes.push('изменена цена');
   if (qtyChanged) changes.push('изменено количество');
   if (itemDescChanged) changes.push('изменено описание позиции');
+  if (sectionChanged) changes.push('изменён раздел позиции');
 
   if ((old.description || '') !== (next.description || '')) {
     changes.push('изменено описание предложения');
