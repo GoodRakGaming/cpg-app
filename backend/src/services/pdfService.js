@@ -173,17 +173,17 @@ function renderCompanyHeader(company, number, date) {
 
   const requisiteParts = [
     company.address ? esc(company.address) : '',
+  ].filter(Boolean);
+
+  const regParts = [
     company.inn ? `ИНН ${esc(company.inn)}` : '',
+    company.kpp ? `КПП ${esc(company.kpp)}` : '',
+    company.ogrn ? `ОГРН ${esc(company.ogrn)}` : '',
   ].filter(Boolean);
 
   const contactParts = [
     company.phone ? esc(company.phone) : '',
     company.email ? esc(company.email) : '',
-  ].filter(Boolean);
-
-  const extraFields = [
-    company.ogrn ? `ОГРН ${esc(company.ogrn)}` : '',
-    company.kpp ? `КПП ${esc(company.kpp)}` : '',
   ].filter(Boolean);
 
   const bank = company.bank || {};
@@ -209,15 +209,15 @@ function renderCompanyHeader(company, number, date) {
         <div class="company-block">
           <div class="company-name">${esc(company.name)}</div>
           ${requisiteParts.length ? `<div class="company-requisites">${requisiteParts.join(', ')}</div>` : ''}
+          ${regParts.length ? `<div class="company-requisites">${regParts.join(' · ')}</div>` : ''}
           ${contactParts.length ? `<div class="company-requisites">${contactParts.join(' · ')}</div>` : ''}
         </div>
       </div>
       ${docRef}
     </header>
-    ${(extraFields.length || bankParts.length) ? `
+    ${bankParts.length ? `
     <div class="company-extra">
-      ${extraFields.length ? `<span>${extraFields.join(', ')}</span>` : ''}
-      ${bankParts.length ? `<span>${bankParts.join(', ')}</span>` : ''}
+      <span>${bankParts.join(', ')}</span>
     </div>` : ''}
   </div>`;
 }
