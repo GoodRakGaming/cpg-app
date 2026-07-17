@@ -25,6 +25,31 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function RemoveFileLink({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="mt-1.5 block text-xs font-medium text-danger hover:text-danger/80">
+      Отменить выбор
+    </button>
+  );
+}
+
+function IncludeInPdfCheckbox({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+}) {
+  return (
+    <label className="mt-1.5 flex items-center gap-1.5 text-xs text-muted">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-accent" />
+      {label}
+    </label>
+  );
+}
+
 export function TemplateFormSections({ form, itemsLabel = 'Позиции' }: { form: TemplateForm; itemsLabel?: string }) {
   const {
     name, setName,
@@ -35,6 +60,7 @@ export function TemplateFormSections({ form, itemsLabel = 'Позиции' }: { 
     company, setCompany,
     signer, setSigner,
     handleLogoUpload, handleSignatureUpload,
+    handleRemoveLogo, handleRemoveSignature, handleRemoveStamp,
   } = form;
 
   return (
@@ -108,7 +134,12 @@ export function TemplateFormSections({ form, itemsLabel = 'Позиции' }: { 
                 onChange={(e) => handleLogoUpload(e.target.files?.[0])}
                 className={FILE_INPUT_CLASS}
               />
-              {company.logo && <img src={company.logo} alt="Логотип" className="mt-2 h-12 object-contain" />}
+              {company.logo && (
+                <>
+                  <img src={company.logo} alt="Логотип" className="mt-2 h-12 object-contain" />
+                  <RemoveFileLink onClick={handleRemoveLogo} />
+                </>
+              )}
             </Field>
           </div>
         </div>
@@ -174,6 +205,16 @@ export function TemplateFormSections({ form, itemsLabel = 'Позиции' }: { 
               onChange={(e) => handleSignatureUpload('signatureImage', e.target.files?.[0])}
               className={FILE_INPUT_CLASS}
             />
+            {signer.signatureImage && (
+              <>
+                <RemoveFileLink onClick={handleRemoveSignature} />
+                <IncludeInPdfCheckbox
+                  checked={signer.includeSignature !== false}
+                  onChange={(checked) => setSigner((prev) => ({ ...prev, includeSignature: checked }))}
+                  label="Добавлять подпись в PDF"
+                />
+              </>
+            )}
           </Field>
           <Field label="Скан печати (опционально)">
             <input
@@ -182,6 +223,16 @@ export function TemplateFormSections({ form, itemsLabel = 'Позиции' }: { 
               onChange={(e) => handleSignatureUpload('stampImage', e.target.files?.[0])}
               className={FILE_INPUT_CLASS}
             />
+            {signer.stampImage && (
+              <>
+                <RemoveFileLink onClick={handleRemoveStamp} />
+                <IncludeInPdfCheckbox
+                  checked={signer.includeStamp !== false}
+                  onChange={(checked) => setSigner((prev) => ({ ...prev, includeStamp: checked }))}
+                  label="Добавлять печать в PDF"
+                />
+              </>
+            )}
           </Field>
         </div>
       </Card>

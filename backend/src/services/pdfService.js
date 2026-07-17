@@ -321,12 +321,17 @@ function renderSignature(signer, company) {
   if (!signer || (!signer.fullName && !signer.position)) return '';
 
   const label = [signer.position, company?.name].filter(Boolean).join(' ');
-  const signatureImage = signer.signatureImage
+  const includeSignature = signer.includeSignature !== false;
+  const includeStamp = signer.includeStamp !== false;
+
+  const signatureImage = (signer.signatureImage && includeSignature)
     ? `<img class="signature-image" src="${esc(signer.signatureImage)}" alt="">`
     : '';
-  const stamp = signer.stampImage
-    ? `<img class="stamp-image" src="${esc(signer.stampImage)}" alt="">`
-    : '<div class="stamp-placeholder">м.п. / скан печати</div>';
+  const stamp = !includeStamp
+    ? ''
+    : signer.stampImage
+      ? `<img class="stamp-image" src="${esc(signer.stampImage)}" alt="">`
+      : '<div class="stamp-placeholder">м.п. / скан печати</div>';
 
   return `
   <div class="signature-block">

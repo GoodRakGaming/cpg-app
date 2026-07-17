@@ -71,6 +71,8 @@ export interface Signer {
   position?: string;
   signatureImage?: string; // base64 data URL
   stampImage?: string; // base64 data URL
+  includeSignature?: boolean; // whether to embed signatureImage in the generated PDF (default true)
+  includeStamp?: boolean; // whether to embed stampImage in the generated PDF (default true)
 }
 
 export interface TemplateData {

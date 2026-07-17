@@ -3,7 +3,7 @@ import { Company, Signer, Template, TemplateData } from '@/lib/api';
 import { itemsFromArray, useItems } from '@/lib/useItems';
 
 const emptyCompany = (): Company => ({ name: '', address: '', inn: '', kpp: '', ogrn: '', phone: '', email: '', bank: {} });
-const emptySigner = (): Signer => ({ fullName: '', position: '' });
+const emptySigner = (): Signer => ({ fullName: '', position: '', includeSignature: true, includeStamp: true });
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -57,6 +57,10 @@ export function useTemplateForm() {
     }
   };
 
+  const handleRemoveLogo = () => setCompany((prev) => ({ ...prev, logo: undefined }));
+  const handleRemoveSignature = () => setSigner((prev) => ({ ...prev, signatureImage: undefined }));
+  const handleRemoveStamp = () => setSigner((prev) => ({ ...prev, stampImage: undefined }));
+
   const buildData = (): TemplateData => {
     const hasBank = Object.values(company.bank || {}).some((v) => v);
     return {
@@ -84,6 +88,9 @@ export function useTemplateForm() {
     setSigner,
     handleLogoUpload,
     handleSignatureUpload,
+    handleRemoveLogo,
+    handleRemoveSignature,
+    handleRemoveStamp,
     uploadError,
     loadFrom,
     buildData,
