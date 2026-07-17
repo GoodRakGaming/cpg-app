@@ -13,7 +13,7 @@ export function FileUploadField({ value, onSelect, onRemove, alt }: FileUploadFi
   const [zoomOpen, setZoomOpen] = useState(false);
 
   return (
-    <div className="flex items-center gap-3">
+    <div>
       <input
         ref={inputRef}
         type="file"
@@ -25,25 +25,27 @@ export function FileUploadField({ value, onSelect, onRemove, alt }: FileUploadFi
           e.target.value = '';
         }}
       />
-      <Button type="button" variant="secondary" className="shrink-0 px-3 py-1.5" onClick={() => inputRef.current?.click()}>
-        Выбор файла
-      </Button>
+      <div className="flex items-center gap-3">
+        <Button type="button" variant="secondary" className="shrink-0 px-3 py-1.5" onClick={() => inputRef.current?.click()}>
+          Выбор файла
+        </Button>
 
-      {value ? (
-        <button
-          type="button"
-          onClick={() => setZoomOpen(true)}
-          className="cursor-zoom-in rounded-control border border-line bg-surface-0 p-1"
-          title="Нажмите, чтобы увеличить"
-        >
-          <img src={value} alt={alt} className="h-10 object-contain" />
-        </button>
-      ) : (
-        <span className="text-sm text-muted">Не выбран ни один файл</span>
-      )}
+        {value ? (
+          <button
+            type="button"
+            onClick={() => setZoomOpen(true)}
+            className="cursor-zoom-in rounded-control border border-line bg-surface-0 p-1"
+            title="Нажмите, чтобы увеличить"
+          >
+            <img src={value} alt={alt} className="h-10 object-contain" />
+          </button>
+        ) : (
+          <span className="text-sm text-muted">Не выбран ни один файл</span>
+        )}
+      </div>
 
       {value && (
-        <button type="button" onClick={onRemove} className="text-xs font-medium text-danger hover:text-danger/80">
+        <button type="button" onClick={onRemove} className="mt-1.5 block text-xs font-medium text-danger hover:text-danger/80">
           Отменить выбор
         </button>
       )}
