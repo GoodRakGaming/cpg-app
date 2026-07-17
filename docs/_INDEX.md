@@ -106,7 +106,7 @@
 |------|----------|--------|-----------|
 | **9** | [PHASE_9_KP_VISUAL_REDESIGN.md](PLANNING/PHASE_9_KP_VISUAL_REDESIGN.md) | ✅ Реализовано | Визуальный редизайн КП под ожидания заказчика (модель данных + PDF + редактор) |
 | **9B** | [PHASE_9B_FRONTEND_UI_DESIGN_SESSION_CONTEXT.md](PLANNING/PHASE_9B_FRONTEND_UI_DESIGN_SESSION_CONTEXT.md) | 📝 Бриф | Контекст для отдельной сессии дизайна веб-интерфейса (dashboard/формы/таблицы) |
-| **9B** | [PHASE_9B_FRONTEND_UI_REDESIGN.md](PLANNING/PHASE_9B_FRONTEND_UI_REDESIGN.md) | ✅ Дизайн готов | Итоги дизайн-сессии: токены, компоненты, паттерны экранов — готово к реализации |
+| **9B** | [PHASE_9B_FRONTEND_UI_REDESIGN.md](PLANNING/PHASE_9B_FRONTEND_UI_REDESIGN.md) | ✅ Реализовано | Токены, компоненты, паттерны экранов — реализовано поэтапно: списки → редакторы → NavRail |
 | **10** | [PHASE_10_AI_PRICE_INTELLIGENCE.md](PLANNING/PHASE_10_AI_PRICE_INTELLIGENCE.md) | 📝 План | AI-анализ рынка (Nextcloud + n8n + локальный LLM) → каталог цен для КП |
 
 ---
@@ -232,6 +232,6 @@
 
 ---
 
-**Последнее обновление:** 2026-05-21  
+**Последнее обновление:** 2026-07-17  
 **Версия документации:** 1.0  
 [Вернуться к главному README](README.md)
