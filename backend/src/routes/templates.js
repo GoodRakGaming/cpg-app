@@ -80,16 +80,15 @@ router.get('/', authenticateToken, async (req, res, next) => {
     const order = (req.query.order || 'desc').toUpperCase();
     const search = req.query.search; // Опциональный поиск по названию
 
-    // Строим где условие
+    // Шаблоны общие для всех сотрудников (не только созданные текущим пользователем)
     const where = {
-      created_by: req.userId,
       is_active: true,
     };
     if (search) {
       where.name = { [Op.iLike]: `%${search}%` };
     }
 
-    // Получить шаблоны пользователя
+    // Получить шаблоны
     const { count, rows } = await Template.findAndCountAll({
       where,
       limit,
@@ -148,7 +147,6 @@ router.get('/:id', authenticateToken, async (req, res, next) => {
     const template = await Template.findOne({
       where: {
         id: req.params.id,
-        created_by: req.userId, // Только свои шаблоны
         is_active: true,
       },
       attributes: [
@@ -217,11 +215,10 @@ router.put('/:id', authenticateToken, async (req, res, next) => {
       });
     }
 
-    // Находим шаблон
+    // Находим шаблон (общий для всех сотрудников)
     const template = await Template.findOne({
       where: {
         id: req.params.id,
-        created_by: req.userId, // Только свои шаблоны
         is_active: true,
       },
     });
@@ -276,7 +273,6 @@ router.delete('/:id', authenticateToken, async (req, res, next) => {
     const template = await Template.findOne({
       where: {
         id: req.params.id,
-        created_by: req.userId, // Только свои шаблоны
         is_active: true,
       },
     });
