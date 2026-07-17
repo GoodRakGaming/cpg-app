@@ -5,7 +5,14 @@ import { itemsFromArray, useItems } from '@/lib/useItems';
 const emptyCompany = (): Company => ({ name: '', address: '', inn: '', kpp: '', ogrn: '', phone: '', email: '', bank: {} });
 const emptySigner = (): Signer => ({ fullName: '', position: '', includeSignature: true, includeStamp: true });
 
+// Images are embedded as base64 directly in the template's data column (no separate file
+// storage) — cap the size so nobody accidentally bloats the row with a full-resolution photo.
+const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB
+
 function readFileAsDataUrl(file: File): Promise<string> {
+  if (file.size > MAX_IMAGE_SIZE) {
+    return Promise.reject(new Error('Файл слишком большой (максимум 2 МБ)'));
+  }
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
@@ -40,8 +47,9 @@ export function useTemplateForm() {
     try {
       const dataUrl = await readFileAsDataUrl(file);
       setCompany((prev) => ({ ...prev, logo: dataUrl }));
+      setUploadError(null);
     } catch (err) {
-      setUploadError('Не удалось загрузить логотип');
+      setUploadError(err instanceof Error ? err.message : 'Не удалось загрузить логотип');
       console.error(err);
     }
   };
@@ -51,8 +59,9 @@ export function useTemplateForm() {
     try {
       const dataUrl = await readFileAsDataUrl(file);
       setSigner((prev) => ({ ...prev, [field]: dataUrl }));
+      setUploadError(null);
     } catch (err) {
-      setUploadError('Не удалось загрузить изображение');
+      setUploadError(err instanceof Error ? err.message : 'Не удалось загрузить изображение');
       console.error(err);
     }
   };

@@ -48,8 +48,10 @@ export default function NewTemplatePage() {
         </Link>
       </div>
 
-      {error && (
-        <div className="mb-4 rounded-control border border-danger/20 bg-danger-soft px-4 py-3 text-danger">{error}</div>
+      {(error || form.uploadError) && (
+        <div className="mb-4 rounded-control border border-danger/20 bg-danger-soft px-4 py-3 text-danger">
+          {error || form.uploadError}
+        </div>
       )}
 
       <TemplateFormSections form={form} />

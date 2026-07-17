@@ -207,6 +207,8 @@ export function TemplateFormSections({ form, itemsLabel = 'Позиции' }: { 
             />
             {signer.signatureImage && (
               <>
+                <img src={signer.signatureImage} alt="Скан подписи" className="mt-2 h-10 object-contain" />
+                <p className="mt-1 text-xs text-muted">Файл уже загружен ранее</p>
                 <RemoveFileLink onClick={handleRemoveSignature} />
                 <IncludeInPdfCheckbox
                   checked={signer.includeSignature !== false}
@@ -225,6 +227,8 @@ export function TemplateFormSections({ form, itemsLabel = 'Позиции' }: { 
             />
             {signer.stampImage && (
               <>
+                <img src={signer.stampImage} alt="Скан печати" className="mt-2 h-10 object-contain" />
+                <p className="mt-1 text-xs text-muted">Файл уже загружен ранее</p>
                 <RemoveFileLink onClick={handleRemoveStamp} />
                 <IncludeInPdfCheckbox
                   checked={signer.includeStamp !== false}
