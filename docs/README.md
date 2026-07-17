@@ -82,20 +82,23 @@
 
 ## 📊 Текущий статус проекта
 
-**Реализовано:** ✅ **62.5%** (5 фаз из 8)
+**Реализовано:** ✅ **~81%** основного roadmap (6.5 фаз из 8) + Phase 9 и 9B (редизайн, за рамками
+исходных 8) уже готовы. Приложение развёрнуто и работает на продакшене: https://cp.profstroi74.ru
 
 ### ✅ Что готово
 - ✅ **Backend** (5 фаз) — Express API 100% функциональный
-- ⚠️ **Frontend Core** (Phase 7) — Auth pages + Dashboard + Proposals list (работает, но в активном тестировании)
+- ✅ **Frontend Core + Extended** (Phase 7 + 7.2) — Auth, Dashboard, Proposals/Templates (список +
+  редакторы), PDF
 - ✅ **Database** — PostgreSQL + Sequelize ORM
 - ✅ **Authentication** — JWT с refresh tokens
 - ✅ **PDF Generation** — Puppeteer для HTML → PDF
+- ✅ **Визуальный редизайн** (Phase 9 + 9B) — PDF-документ и весь веб-интерфейс на единых токенах
 
-### ⏳ В разработке
-- ⏳ **Frontend Extended** (Phase 7.2) — Proposal Editor, Templates Manager
-- ⏳ **Advanced Features** (Phases 6, 8) — Notifications, Analytics, CI/CD
+### ⏳ В разработке / план
+- ⏳ **Phase 6** — Advanced Backend Features (Notifications, Exports) — не приоритет
+- 📝 **Phase 10** — AI-анализ рынка и каталог цен (следующий приоритет)
 
-**Последнее обновление:** 2026-05-21  
+**Последнее обновление:** 2026-07-17  
 **[Подробный статус →](STATUS.md)**
 
 ---

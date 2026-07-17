@@ -16,13 +16,13 @@
 - ✅ Удобного веб-интерфейса
 
 ### Status (Статус)
-- **Реализовано:** 62.5% (5 фаз из 8)
+- **Реализовано:** ~81% основного roadmap (6.5 фаз из 8) + Phase 9/9B (редизайн, отдельный трек за
+  рамками исходных 8) уже готовы — см. [STATUS.md](../STATUS.md) для точной разбивки
 - **Backend:** ✅ 100% готов
-- **Frontend:** ⏳ 60% готов, но в активном тестировании
-  - `/login`, `/register`, `/proposals` работают
-  - `/proposals/new` и `/proposals/[id]` реализованы, но требуют доработки
-  - `/templates` пока отсутствует
-- **Deployment:** ⏳ Планируется
+- **Frontend:** ✅ Все экраны реализованы и переведены на единую дизайн-систему (Phase 9B)
+  - `/login`, `/register`, `/dashboard/proposals`, `/dashboard/templates` — списки с поиском/фильтрами
+  - `/proposals/new`, `/proposals/[id]`, `/templates/new`, `/templates/[id]` — редакторы
+- **Deployment:** ✅ Развёрнуто на продакшене — https://cp.profstroi74.ru
 
 ---
 
