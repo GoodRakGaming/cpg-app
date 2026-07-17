@@ -1,5 +1,6 @@
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { ItemsEditor } from '@/components/shared/ItemsEditor';
 import { ProposalForm } from '@/lib/useProposalForm';
 
@@ -35,6 +36,8 @@ export function ProposalFormSections({ form }: { form: ProposalForm }) {
     recipient, setRecipient,
     validDays, setValidDays,
     vatNote, setVatNote,
+    includeSignature, setIncludeSignature,
+    includeStamp, setIncludeStamp,
   } = form;
 
   return (
@@ -112,6 +115,10 @@ export function ProposalFormSections({ form }: { form: ProposalForm }) {
             <Field label="Примечание об НДС (опционально)">
               <Input value={vatNote} onChange={(e) => setVatNote(e.target.value)} placeholder="Например: Без НДС (УСН)" />
             </Field>
+          </div>
+          <div className="flex flex-wrap gap-4 sm:col-span-3">
+            <Checkbox checked={includeSignature} onChange={setIncludeSignature} label="Добавлять подпись в PDF" />
+            <Checkbox checked={includeStamp} onChange={setIncludeStamp} label="Добавлять печать в PDF" />
           </div>
         </div>
       </Card>

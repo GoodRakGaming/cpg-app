@@ -71,8 +71,6 @@ export interface Signer {
   position?: string;
   signatureImage?: string; // base64 data URL
   stampImage?: string; // base64 data URL
-  includeSignature?: boolean; // whether to embed signatureImage in the generated PDF (default true)
-  includeStamp?: boolean; // whether to embed stampImage in the generated PDF (default true)
 }
 
 export interface TemplateData {
@@ -97,6 +95,8 @@ export interface ProposalData {
   items?: Item[];
   validDays?: number | '';
   vatNote?: string;
+  includeSignature?: boolean; // whether to embed the template's signature scan in the PDF (default true)
+  includeStamp?: boolean; // whether to embed the template's stamp scan in the PDF (default true)
 }
 
 export interface Template {

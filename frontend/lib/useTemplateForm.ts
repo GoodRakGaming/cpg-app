@@ -3,7 +3,7 @@ import { Company, Signer, Template, TemplateData } from '@/lib/api';
 import { itemsFromArray, useItems } from '@/lib/useItems';
 
 const emptyCompany = (): Company => ({ name: '', address: '', inn: '', kpp: '', ogrn: '', phone: '', email: '', bank: {} });
-const emptySigner = (): Signer => ({ fullName: '', position: '', includeSignature: true, includeStamp: true });
+const emptySigner = (): Signer => ({ fullName: '', position: '' });
 
 // Images are embedded as base64 directly in the template's data column (no separate file
 // storage) — cap the size so nobody accidentally bloats the row with a full-resolution photo.

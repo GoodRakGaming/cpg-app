@@ -14,6 +14,8 @@ export function useProposalForm() {
   const [recipient, setRecipient] = useState<Recipient>(emptyRecipient());
   const [validDays, setValidDays] = useState<number | ''>('');
   const [vatNote, setVatNote] = useState('');
+  const [includeSignature, setIncludeSignature] = useState(true);
+  const [includeStamp, setIncludeStamp] = useState(true);
 
   const loadFrom = useCallback((proposal: Proposal) => {
     setTitle(proposal.title);
@@ -25,6 +27,8 @@ export function useProposalForm() {
     setRecipient({ ...emptyRecipient(), ...(proposal.data?.recipient || {}) });
     setValidDays(proposal.data?.validDays ?? '');
     setVatNote(proposal.data?.vatNote || '');
+    setIncludeSignature(proposal.data?.includeSignature !== false);
+    setIncludeStamp(proposal.data?.includeStamp !== false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -37,6 +41,8 @@ export function useProposalForm() {
     recipient: recipient.org || recipient.fullName ? recipient : undefined,
     validDays: validDays === '' ? undefined : validDays,
     vatNote: vatNote || undefined,
+    includeSignature,
+    includeStamp,
   });
 
   return {
@@ -57,6 +63,10 @@ export function useProposalForm() {
     setValidDays,
     vatNote,
     setVatNote,
+    includeSignature,
+    setIncludeSignature,
+    includeStamp,
+    setIncludeStamp,
     loadFrom,
     buildData,
   };

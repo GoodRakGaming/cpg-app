@@ -33,30 +33,12 @@ function RemoveFileLink({ onClick }: { onClick: () => void }) {
   );
 }
 
-function IncludeInPdfCheckbox({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  label: string;
-}) {
-  return (
-    <label className="mt-1.5 flex items-center gap-1.5 text-xs text-muted">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="accent-accent" />
-      {label}
-    </label>
-  );
-}
-
 export function TemplateFormSections({ form, itemsLabel = 'Позиции' }: { form: TemplateForm; itemsLabel?: string }) {
   const {
     name, setName,
     description, setDescription,
     itemsState,
     terms, setTerms,
-    footer, setFooter,
     company, setCompany,
     signer, setSigner,
     handleLogoUpload, handleSignatureUpload,
@@ -210,11 +192,6 @@ export function TemplateFormSections({ form, itemsLabel = 'Позиции' }: { 
                 <img src={signer.signatureImage} alt="Скан подписи" className="mt-2 h-10 object-contain" />
                 <p className="mt-1 text-xs text-muted">Файл уже загружен ранее</p>
                 <RemoveFileLink onClick={handleRemoveSignature} />
-                <IncludeInPdfCheckbox
-                  checked={signer.includeSignature !== false}
-                  onChange={(checked) => setSigner((prev) => ({ ...prev, includeSignature: checked }))}
-                  label="Добавлять подпись в PDF"
-                />
               </>
             )}
           </Field>
@@ -230,11 +207,6 @@ export function TemplateFormSections({ form, itemsLabel = 'Позиции' }: { 
                 <img src={signer.stampImage} alt="Скан печати" className="mt-2 h-10 object-contain" />
                 <p className="mt-1 text-xs text-muted">Файл уже загружен ранее</p>
                 <RemoveFileLink onClick={handleRemoveStamp} />
-                <IncludeInPdfCheckbox
-                  checked={signer.includeStamp !== false}
-                  onChange={(checked) => setSigner((prev) => ({ ...prev, includeStamp: checked }))}
-                  label="Добавлять печать в PDF"
-                />
               </>
             )}
           </Field>
@@ -256,15 +228,6 @@ export function TemplateFormSections({ form, itemsLabel = 'Позиции' }: { 
               placeholder="Условия оплаты, доставки, гарантий..."
               className="w-full resize-y rounded-control border border-line bg-surface-1 px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent-soft"
             />
-          </Field>
-          <Field label="Нижний колонтитул PDF">
-            <Input
-              value={footer}
-              onChange={(e) => setFooter(e.target.value)}
-              placeholder="Например: ООО «Компания» · ИНН 1234567890 · +7 (999) 000-00-00"
-              maxLength={500}
-            />
-            <p className="mt-1 text-xs text-muted">Отображается в нижней части PDF. Оставьте пустым — будет показана только дата.</p>
           </Field>
         </div>
       </Card>

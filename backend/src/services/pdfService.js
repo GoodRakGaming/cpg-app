@@ -317,12 +317,10 @@ function renderTotalBox(grandTotal, vatNote) {
   </div>`;
 }
 
-function renderSignature(signer, company) {
+function renderSignature(signer, company, includeSignature, includeStamp) {
   if (!signer || (!signer.fullName && !signer.position)) return '';
 
   const label = [signer.position, company?.name].filter(Boolean).join(' ');
-  const includeSignature = signer.includeSignature !== false;
-  const includeStamp = signer.includeStamp !== false;
 
   const signatureImage = (signer.signatureImage && includeSignature)
     ? `<img class="signature-image" src="${esc(signer.signatureImage)}" alt="">`
@@ -564,7 +562,7 @@ function generateProposalHtml(proposal, template) {
       ${renderBulletList(templateData.terms)}
     </div>` : ''}
 
-    ${renderSignature(templateData.signer, templateData.company)}
+    ${renderSignature(templateData.signer, templateData.company, proposalData.includeSignature !== false, proposalData.includeStamp !== false)}
 
     <div class="doc-footer">${templateData.footer ? esc(templateData.footer) : `Документ сформирован ${formatDate()}`}</div>
   </div>
