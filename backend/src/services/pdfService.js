@@ -136,6 +136,13 @@ function formatDate(value) {
   return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+function formatDateLong(value) {
+  const d = value ? new Date(value) : new Date();
+  if (Number.isNaN(d.getTime())) return esc(value);
+  // ru-RU's long month format already appends "г." (e.g. "15 июля 2026 г.") — don't add it again.
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' });
+}
+
 // Multi-line free text (terms/footer/description) may arrive as a string or an
 // array of lines/paragraphs — render either shape as a list of paragraphs.
 function renderTextBlock(value) {
@@ -148,7 +155,16 @@ function renderTextBlock(value) {
     .join('');
 }
 
-function renderCompanyHeader(company, kpNumber) {
+// Same input shapes as renderTextBlock, but rendered as a bulleted list (used for "Условия").
+function renderBulletList(value) {
+  if (!value) return '';
+  const lines = Array.isArray(value) ? value : String(value).split('\n');
+  const items = lines.map((line) => String(line).trim()).filter(Boolean);
+  if (!items.length) return '';
+  return `<ul class="terms-list">${items.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>`;
+}
+
+function renderCompanyHeader(company, number, date) {
   if (!company || !company.name) return '';
 
   const logo = company.logo
@@ -181,23 +197,29 @@ function renderCompanyHeader(company, kpNumber) {
       ].filter(Boolean)
     : [];
 
+  const docRef = number
+    ? `<div class="doc-header-kp">Исх. № ${esc(number)}${date ? `<br>от ${formatDateLong(date)}` : ''}</div>`
+    : '';
+
   return `
-  <header class="doc-header">
-    <div class="doc-header-main">
-      ${logo}
-      <div class="company-block">
-        <div class="company-name">${esc(company.name)}</div>
-        ${requisiteParts.length ? `<div class="company-requisites">${requisiteParts.join(', ')}</div>` : ''}
-        ${contactParts.length ? `<div class="company-requisites">${contactParts.join(' · ')}</div>` : ''}
+  <div class="doc-header">
+    <header class="doc-header-row">
+      <div class="doc-header-main">
+        ${logo}
+        <div class="company-block">
+          <div class="company-name">${esc(company.name)}</div>
+          ${requisiteParts.length ? `<div class="company-requisites">${requisiteParts.join(', ')}</div>` : ''}
+          ${contactParts.length ? `<div class="company-requisites">${contactParts.join(' · ')}</div>` : ''}
+        </div>
       </div>
-    </div>
-    ${kpNumber ? `<div class="doc-header-kp">${esc(kpNumber)}</div>` : ''}
-  </header>
-  ${(extraFields.length || bankParts.length) ? `
-  <div class="company-extra">
-    ${extraFields.length ? `<span>${extraFields.join(', ')}</span>` : ''}
-    ${bankParts.length ? `<span>${bankParts.join(', ')}</span>` : ''}
-  </div>` : ''}`;
+      ${docRef}
+    </header>
+    ${(extraFields.length || bankParts.length) ? `
+    <div class="company-extra">
+      ${extraFields.length ? `<span>${extraFields.join(', ')}</span>` : ''}
+      ${bankParts.length ? `<span>${bankParts.join(', ')}</span>` : ''}
+    </div>` : ''}
+  </div>`;
 }
 
 function renderRecipient(recipient) {
@@ -215,27 +237,42 @@ function renderRecipient(recipient) {
 }
 
 function renderItemsTable(items) {
-  if (!Array.isArray(items) || items.length === 0) return '';
+  if (!Array.isArray(items) || items.length === 0) return { html: '', grandTotal: 0 };
 
   const hasSections = items.some((item) => item.section);
   let rows = '';
   let grandTotal = 0;
+  let sectionTotal = 0;
   let currentSection = undefined;
   let index = 0;
+
+  const closeSection = () => {
+    if (currentSection !== undefined) {
+      rows += `
+          <tr class="section-subtotal-row">
+            <td colspan="5">Подытог по разделу</td>
+            <td class="col-money">${money(sectionTotal)}</td>
+          </tr>`;
+    }
+    sectionTotal = 0;
+  };
 
   for (const item of items) {
     const quantity = Number(item.quantity) || 1;
     const price = Number(item.price) || 0;
     const lineTotal = quantity * price;
     grandTotal += lineTotal;
+    sectionTotal += lineTotal;
 
     if (hasSections && item.section && item.section !== currentSection) {
+      closeSection();
       currentSection = item.section;
       rows += `
           <tr class="section-row">
             <td colspan="6">${esc(currentSection)}</td>
           </tr>`;
       index = 0;
+      sectionTotal = lineTotal;
     }
     index += 1;
 
@@ -249,8 +286,9 @@ function renderItemsTable(items) {
             <td class="col-money">${money(lineTotal)}</td>
           </tr>`;
   }
+  if (hasSections) closeSection();
 
-  return `
+  const html = `
   <table class="items-table">
     <thead>
       <tr>
@@ -264,31 +302,41 @@ function renderItemsTable(items) {
     </thead>
     <tbody>
       ${rows}
-      <tr class="total-row">
-        <td colspan="5">Итого</td>
-        <td class="col-money">${money(grandTotal)} ₽</td>
-      </tr>
     </tbody>
   </table>`;
+
+  return { html, grandTotal };
 }
 
-function renderSignature(signer) {
+function renderTotalBox(grandTotal, vatNote) {
+  const label = vatNote ? `Итого (${esc(vatNote)})` : 'Итого';
+  return `
+  <div class="total-box">
+    <span>${label}</span>
+    <span class="col-money">${money(grandTotal)} ₽</span>
+  </div>`;
+}
+
+function renderSignature(signer, company) {
   if (!signer || (!signer.fullName && !signer.position)) return '';
 
+  const label = [signer.position, company?.name].filter(Boolean).join(' ');
   const signatureImage = signer.signatureImage
     ? `<img class="signature-image" src="${esc(signer.signatureImage)}" alt="">`
     : '';
-  const stampImage = signer.stampImage
+  const stamp = signer.stampImage
     ? `<img class="stamp-image" src="${esc(signer.stampImage)}" alt="">`
-    : (!signer.signatureImage ? '<span class="stamp-placeholder">м.п.</span>' : '');
+    : '<div class="stamp-placeholder">м.п. / скан печати</div>';
 
   return `
   <div class="signature-block">
-    <div class="signature-line">
-      <span class="signature-position">${esc(signer.position || '')}</span>
-      <span class="signature-visual">${signatureImage}${stampImage}</span>
-      <span class="signature-name">${esc(signer.fullName || '')}</span>
+    <div class="signature-main">
+      ${label ? `<div class="signature-label">${esc(label)}</div>` : ''}
+      <div class="signature-visual-row">${signatureImage}</div>
+      <div class="signature-rule"></div>
+      <div class="signature-fio">${esc(signer.fullName || '')}</div>
     </div>
+    <div class="signature-stamp">${stamp}</div>
   </div>`;
 }
 
@@ -314,8 +362,8 @@ function generateProposalHtml(proposal, template) {
     ? proposalData.items
     : (Array.isArray(templateData.items) ? templateData.items : []);
 
-  const kpNumber = proposalData.number ? `КП № ${proposalData.number}` : '';
   const kpDate = formatDate(proposalData.date);
+  const itemsTable = renderItemsTable(displayItems);
 
   const html = `
 <!DOCTYPE html>
@@ -350,18 +398,20 @@ function generateProposalHtml(proposal, template) {
 
     /* ── header ── */
     .doc-header {
+      padding-bottom: 4mm;
+      border-bottom: 1px solid var(--line);
+    }
+    .doc-header-row {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
       gap: 8mm;
-      padding-bottom: 4mm;
-      border-bottom: 1px solid var(--line);
     }
     .doc-header-main { display: flex; align-items: center; gap: 5mm; }
     .company-logo { max-height: 28mm; max-width: 45mm; object-fit: contain; }
     .company-name { font-size: 11pt; font-weight: 700; color: var(--ink); }
     .company-requisites { font-size: 8pt; color: var(--muted); margin-top: 1mm; }
-    .doc-header-kp { font-size: 9pt; color: var(--muted); white-space: nowrap; }
+    .doc-header-kp { font-size: 9pt; color: var(--muted); white-space: nowrap; text-align: right; line-height: 1.4; }
     .company-extra {
       display: flex;
       gap: 6mm;
@@ -418,15 +468,30 @@ function generateProposalHtml(proposal, template) {
       color: var(--accent);
       border-bottom: none;
     }
-    .items-table .total-row td {
+    .items-table .section-subtotal-row td {
       border-bottom: none;
-      border-top: 1px solid var(--ink);
+      font-style: italic;
+      color: var(--muted);
+      padding-top: 1.5mm;
+      padding-bottom: 4mm;
+    }
+    .total-box {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 5mm;
+      padding: 3.5mm 4mm;
+      background: var(--accent-soft);
+      border-radius: 2mm;
       font-weight: 700;
       color: var(--ink);
-      padding-top: 3.5mm;
+      font-size: 10.5pt;
     }
+    .total-box .col-money { font-variant-numeric: tabular-nums; }
 
     /* ── terms ── */
+    .terms-list { margin: 0; padding-left: 4mm; }
+    .terms-list li { margin-top: 1.5mm; color: var(--text); }
     .section { margin-top: 8mm; }
     .section-title {
       font-size: 9.5pt;
@@ -436,26 +501,34 @@ function generateProposalHtml(proposal, template) {
     }
 
     /* ── signature ── */
-    .signature-block { margin-top: 14mm; }
-    .signature-line {
+    .signature-block {
       display: flex;
       align-items: flex-end;
-      gap: 4mm;
-      border-bottom: 1px solid var(--ink);
-      padding-bottom: 1.5mm;
+      justify-content: space-between;
+      gap: 10mm;
+      margin-top: 14mm;
     }
-    .signature-position { font-size: 9.5pt; color: var(--text); white-space: nowrap; }
-    .signature-visual {
-      flex: 1;
+    .signature-main { flex: 1; max-width: 100mm; }
+    .signature-label { font-size: 9.5pt; color: var(--text); margin-bottom: 2mm; }
+    .signature-visual-row { min-height: 12mm; display: flex; align-items: flex-end; }
+    .signature-image { max-height: 14mm; max-width: 55mm; object-fit: contain; }
+    .signature-rule { border-bottom: 1px solid var(--ink); }
+    .signature-fio { font-size: 9.5pt; color: var(--text); margin-top: 1.5mm; }
+    .signature-stamp { flex-shrink: 0; }
+    .stamp-image { max-height: 24mm; max-width: 24mm; object-fit: contain; opacity: 0.85; }
+    .stamp-placeholder {
+      width: 22mm;
+      height: 22mm;
+      border-radius: 50%;
+      border: 1px dashed var(--line);
       display: flex;
-      align-items: flex-end;
+      align-items: center;
       justify-content: center;
-      min-height: 12mm;
+      text-align: center;
+      font-size: 6.5pt;
+      color: var(--muted);
+      padding: 2mm;
     }
-    .signature-image { max-height: 14mm; max-width: 45mm; object-fit: contain; }
-    .stamp-image { max-height: 22mm; max-width: 22mm; object-fit: contain; opacity: 0.85; }
-    .stamp-placeholder { font-size: 8pt; color: var(--muted); }
-    .signature-name { font-size: 9.5pt; color: var(--text); white-space: nowrap; }
 
     /* ── footer ── */
     .doc-footer {
@@ -469,25 +542,24 @@ function generateProposalHtml(proposal, template) {
 </head>
 <body>
   <div class="page">
-    ${renderCompanyHeader(templateData.company, kpNumber)}
+    ${renderCompanyHeader(templateData.company, proposalData.number, proposalData.date)}
     ${renderRecipient(proposalData.recipient)}
 
-    <h1 class="doc-title">${esc(proposal.title)}</h1>
+    <h1 class="doc-title">Коммерческое предложение</h1>
     <div class="doc-meta">${kpDate}${proposalData.validDays ? ` · действительно ${esc(proposalData.validDays)} дн.` : ''}</div>
 
     ${proposalData.description ? `<div class="section">${renderTextBlock(proposalData.description)}</div>` : ''}
 
-    ${renderItemsTable(displayItems)}
-
-    ${proposalData.vatNote ? `<div class="doc-meta" style="margin-top:2mm;">${esc(proposalData.vatNote)}</div>` : ''}
+    ${itemsTable.html}
+    ${itemsTable.html ? renderTotalBox(itemsTable.grandTotal, proposalData.vatNote) : ''}
 
     ${templateData.terms ? `
     <div class="section">
       <div class="section-title">Условия</div>
-      ${renderTextBlock(templateData.terms)}
+      ${renderBulletList(templateData.terms)}
     </div>` : ''}
 
-    ${renderSignature(templateData.signer)}
+    ${renderSignature(templateData.signer, templateData.company)}
 
     <div class="doc-footer">${templateData.footer ? esc(templateData.footer) : `Документ сформирован ${formatDate()}`}</div>
   </div>
