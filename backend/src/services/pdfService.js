@@ -240,9 +240,19 @@ function renderItemsTable(items) {
   if (!Array.isArray(items) || items.length === 0) return { html: '', grandTotal: 0 };
 
   const hasSections = items.some((item) => item.section);
-  let rows = '';
   let grandTotal = 0;
+
+  // Каждый раздел — отдельный <tbody class="section-group"> (заголовок раздела + позиции +
+  // подытог): на группе стоит break-inside: avoid, чтобы при переносе страницы раздел уходил
+  // на новую страницу целиком, а не оставлял «оторванный» подытог после повторённой шапки.
+  // Разделы длиннее KEEP_TOGETHER_MAX_ROWS позиций в страницу заведомо не помещаются —
+  // им break-inside: avoid не ставим (иначе Chromium выталкивает начало таблицы на новую
+  // страницу, оставляя предыдущую полупустой, и всё равно разрывает).
+  const KEEP_TOGETHER_MAX_ROWS = 14;
+  let bodies = '';
+  let rows = '';
   let sectionTotal = 0;
+  let sectionRowCount = 0;
   let currentSection = undefined;
   let index = 0;
 
@@ -254,7 +264,16 @@ function renderItemsTable(items) {
             <td class="col-money">${money(sectionTotal)}</td>
           </tr>`;
     }
+    if (rows) {
+      // Без разделов вся таблица — одна группа: ей запрет разрыва тоже не ставим.
+      const keepTogether = hasSections && sectionRowCount <= KEEP_TOGETHER_MAX_ROWS;
+      bodies += `
+    <tbody${keepTogether ? ' class="section-group"' : ''}>${rows}
+    </tbody>`;
+    }
+    rows = '';
     sectionTotal = 0;
+    sectionRowCount = 0;
   };
 
   for (const item of items) {
@@ -275,6 +294,7 @@ function renderItemsTable(items) {
       sectionTotal = lineTotal;
     }
     index += 1;
+    sectionRowCount += 1;
 
     rows += `
           <tr>
@@ -286,7 +306,7 @@ function renderItemsTable(items) {
             <td class="col-money">${money(lineTotal)}</td>
           </tr>`;
   }
-  if (hasSections) closeSection();
+  closeSection();
 
   const html = `
   <table class="items-table">
@@ -299,10 +319,7 @@ function renderItemsTable(items) {
         <th class="col-money">Цена</th>
         <th class="col-money">Сумма</th>
       </tr>
-    </thead>
-    <tbody>
-      ${rows}
-    </tbody>
+    </thead>${bodies}
   </table>`;
 
   return { html, grandTotal };
@@ -465,6 +482,8 @@ function generateProposalHtml(proposal, template) {
     .items-table .col-num { width: 8mm; text-align: center; color: var(--muted); }
     .items-table .col-unit { width: 16mm; text-align: center; }
     .items-table .col-money { width: 30mm; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .items-table tr { break-inside: avoid; }
+    .items-table tbody.section-group { break-inside: avoid; }
     .items-table .section-row td {
       padding-top: 5mm;
       font-weight: 700;
