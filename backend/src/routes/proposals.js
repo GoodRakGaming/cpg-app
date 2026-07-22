@@ -171,8 +171,8 @@ router.get('/', authenticateToken, async (req, res, next) => {
     const status = req.query.status; // Опциональный фильтр по статусу
     const search = req.query.search; // Опциональный поиск по названию
 
-    // Строим где условие
-    const where = { user_id: req.userId, is_active: true };
+    // Предложения общие для всех сотрудников (не только созданные текущим пользователем)
+    const where = { is_active: true };
     if (status && ['draft', 'final', 'archived'].includes(status)) {
       where.status = status;
     }
@@ -236,10 +236,10 @@ router.get('/', authenticateToken, async (req, res, next) => {
  */
 router.get('/:id', authenticateToken, async (req, res, next) => {
   try {
+    // Предложения общие для всех сотрудников
     const proposal = await Proposal.findOne({
       where: {
         id: req.params.id,
-        user_id: req.userId,
         is_active: true,
       },
       include: [
@@ -314,11 +314,10 @@ router.put('/:id', authenticateToken, async (req, res, next) => {
       });
     }
 
-    // Находим предложение
+    // Находим предложение (общее для всех сотрудников)
     const proposal = await Proposal.findOne({
       where: {
         id: req.params.id,
-        user_id: req.userId,
         is_active: true,
       },
     });
@@ -406,10 +405,10 @@ router.put('/:id', authenticateToken, async (req, res, next) => {
  */
 router.delete('/:id', authenticateToken, async (req, res, next) => {
   try {
+    // Предложения общие для всех сотрудников
     const proposal = await Proposal.findOne({
       where: {
         id: req.params.id,
-        user_id: req.userId,
         is_active: true,
       },
     });
@@ -448,11 +447,10 @@ router.delete('/:id', authenticateToken, async (req, res, next) => {
  */
 router.get('/:id/versions', authenticateToken, async (req, res, next) => {
   try {
-    // Проверяем что предложение существует и принадлежит пользователю
+    // Проверяем что предложение существует (общее для всех сотрудников)
     const proposal = await Proposal.findOne({
       where: {
         id: req.params.id,
-        user_id: req.userId,
         is_active: true,
       },
     });
@@ -500,11 +498,10 @@ router.get('/:id/versions', authenticateToken, async (req, res, next) => {
  */
 router.get('/:id/versions/:version_id', authenticateToken, async (req, res, next) => {
   try {
-    // Проверяем что предложение принадлежит пользователю
+    // Проверяем что предложение существует (общее для всех сотрудников)
     const proposal = await Proposal.findOne({
       where: {
         id: req.params.id,
-        user_id: req.userId,
         is_active: true,
       },
     });
@@ -565,7 +562,7 @@ router.get('/:id/versions/:version_id', authenticateToken, async (req, res, next
 router.post('/:id/versions/:version_id/restore', authenticateToken, async (req, res, next) => {
   try {
     const proposal = await Proposal.findOne({
-      where: { id: req.params.id, user_id: req.userId, is_active: true },
+      where: { id: req.params.id, is_active: true },
     });
 
     if (!proposal) {

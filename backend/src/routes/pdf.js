@@ -21,13 +21,13 @@ function contentDisposition(type, filename) {
   return `${type}; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
-async function findProposal(proposalId, userId, includeVersion = false) {
+// Предложения общие для всех сотрудников — доступ к PDF не ограничен автором
+async function findProposal(proposalId, includeVersion = false) {
   const include = [{ association: 'template' }];
   if (includeVersion) include.push({ association: 'currentVersion' });
 
   const proposal = await Proposal.findByPk(proposalId, { include });
   if (!proposal) return { error: 404, message: 'Предложение не найдено' };
-  if (proposal.user_id !== userId) return { error: 403, message: 'Нет доступа' };
   if (!proposal.is_active) return { error: 410, message: 'Предложение удалено' };
   return { proposal };
 }
@@ -38,7 +38,6 @@ router.get('/status/:proposalId', authenticateToken, async (req, res) => {
   try {
     const proposal = await Proposal.findByPk(req.params.proposalId);
     if (!proposal) return res.status(404).json({ success: false, error: 'Proposal not found' });
-    if (proposal.user_id !== req.userId) return res.status(403).json({ success: false, error: 'Access denied' });
 
     res.json({
       success: true,
@@ -61,7 +60,7 @@ router.get('/status/:proposalId', authenticateToken, async (req, res) => {
 
 router.get('/preview/:proposalId', authenticateToken, async (req, res) => {
   try {
-    const { error, message, proposal } = await findProposal(req.params.proposalId, req.userId, true);
+    const { error, message, proposal } = await findProposal(req.params.proposalId, true);
     if (error) return res.status(error).json({ success: false, error: message });
 
     const html = pdfService.generateProposalHtml(proposal, proposal.template);
@@ -77,7 +76,7 @@ router.get('/preview/:proposalId', authenticateToken, async (req, res) => {
 
 router.post('/generate/:proposalId', authenticateToken, async (req, res) => {
   try {
-    const { error, message, proposal } = await findProposal(req.params.proposalId, req.userId, true);
+    const { error, message, proposal } = await findProposal(req.params.proposalId, true);
     if (error) return res.status(error).json({ success: false, error: message });
 
     const html = pdfService.generateProposalHtml(proposal, proposal.template);
@@ -102,7 +101,7 @@ router.post('/generate/:proposalId', authenticateToken, async (req, res) => {
 
 router.post('/export/:proposalId', authenticateToken, async (req, res) => {
   try {
-    const { error, message, proposal } = await findProposal(req.params.proposalId, req.userId, true);
+    const { error, message, proposal } = await findProposal(req.params.proposalId, true);
     if (error) return res.status(error).json({ success: false, error: message });
 
     const { format, margin, printBackground } = req.body;
@@ -132,7 +131,7 @@ router.post('/export/:proposalId', authenticateToken, async (req, res) => {
 
 router.get('/:proposalId', authenticateToken, async (req, res) => {
   try {
-    const { error, message, proposal } = await findProposal(req.params.proposalId, req.userId, true);
+    const { error, message, proposal } = await findProposal(req.params.proposalId, true);
     if (error) return res.status(error).json({ success: false, error: message });
 
     const html = pdfService.generateProposalHtml(proposal, proposal.template);

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AuthUser } from '@/lib/auth';
@@ -49,8 +50,18 @@ const USERS_ICON = (
 export function NavRail({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{ left: number; bottom: number } | null>(null);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const avatarWrapperRef = useRef<HTMLDivElement>(null);
   const isAdmin = user.role === 'admin';
+
+  const toggleMenu = () => {
+    if (!menuOpen && avatarWrapperRef.current) {
+      const rect = avatarWrapperRef.current.getBoundingClientRect();
+      setMenuPosition({ left: rect.right + 8, bottom: window.innerHeight - rect.bottom });
+    }
+    setMenuOpen((v) => !v);
+  };
 
   return (
     <div className="group/rail sticky top-0 flex h-screen w-14 flex-shrink-0 flex-col items-center gap-2.5 overflow-y-auto bg-surface-0 py-4 transition-colors hover:bg-line/60">
@@ -90,20 +101,26 @@ export function NavRail({ user, onLogout }: { user: AuthUser; onLogout: () => vo
         </Link>
       )}
 
-      <div className="relative mt-auto">
+      <div className="relative mt-auto" ref={avatarWrapperRef}>
         <button
           type="button"
-          onClick={() => setMenuOpen((v) => !v)}
+          onClick={toggleMenu}
           title={user.email}
           className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-[10.5px] font-bold text-white"
         >
           {initials(user)}
         </button>
+      </div>
 
-        {menuOpen && (
+      {menuOpen &&
+        menuPosition &&
+        createPortal(
           <>
-            <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-            <div className="absolute bottom-0 left-full z-20 ml-2 w-56 rounded-card border border-line bg-surface-1 p-3 shadow-card">
+            <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+            <div
+              className="fixed z-50 w-56 rounded-card border border-line bg-surface-1 p-3 shadow-card"
+              style={{ left: menuPosition.left, bottom: menuPosition.bottom }}
+            >
               <p className="truncate text-sm font-medium text-ink">{user.email}</p>
               {(user.first_name || user.last_name) && (
                 <p className="truncate text-xs text-muted">
@@ -128,9 +145,9 @@ export function NavRail({ user, onLogout }: { user: AuthUser; onLogout: () => vo
                 Выход
               </button>
             </div>
-          </>
+          </>,
+          document.body
         )}
-      </div>
 
       {changePasswordOpen && <ChangePasswordModal onClose={() => setChangePasswordOpen(false)} />}
     </div>
