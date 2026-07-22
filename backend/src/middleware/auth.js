@@ -51,7 +51,7 @@ const authenticateToken = async (req, res, next) => {
         success: false,
         error: {
           status: 401,
-          message: 'Токен истёк. Используйте refresh token для обновления.',
+          message: 'Время активной сессии истекло. Войдите заново в аккаунт.',
         },
       });
     }
