@@ -9,6 +9,11 @@ const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// За приложением стоит ровно один reverse-proxy хоп (Nginx Proxy Manager) — доверяем
+// X-Forwarded-For только от него, иначе rate limiter будет ключеваться по IP прокси
+// вместо реального клиента.
+app.set('trust proxy', 1);
+
 // ============= MIDDLEWARE =============
 
 // CORS
@@ -44,6 +49,7 @@ app.use('/api/auth', require('./routes/auth')); // Фаза 2: Auth endpoints
 app.use('/api/templates', require('./routes/templates')); // Фаза 3: Template Management
 app.use('/api/proposals', require('./routes/proposals')); // Фаза 4: Proposal CRUD
 app.use('/api/pdf', require('./routes/pdf')); // Фаза 5: PDF Generation
+app.use('/api/users', require('./routes/users')); // Управление пользователями (admin-only)
 
 // ============= ERROR HANDLING =============
 
@@ -72,10 +78,14 @@ const startServer = async () => {
       console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`💾 Database: ${process.env.DATABASE_NAME || 'proposal_generator'}`);
       console.log(`\n📝 API Endpoints:`);
-      console.log(`   POST   /api/auth/register      - Регистрация`);
       console.log(`   POST   /api/auth/login         - Вход`);
       console.log(`   POST   /api/auth/refresh       - Обновление токена`);
       console.log(`   POST   /api/auth/logout        - Выход`);
+      console.log(`   POST   /api/auth/change-password - Смена пароля (auth)`);
+      console.log(`   GET    /api/users              - Список пользователей (admin)`);
+      console.log(`   POST   /api/users              - Создать пользователя (admin)`);
+      console.log(`   PATCH  /api/users/:id          - Обновить пользователя (admin)`);
+      console.log(`   POST   /api/users/:id/reset-password - Сбросить пароль (admin)`);
       console.log(`   POST   /api/templates          - Создать шаблон (auth)`);
       console.log(`   GET    /api/templates          - Список шаблонов (auth)`);
       console.log(`   GET    /api/templates/:id      - Получить шаблон (auth)`);

@@ -1,8 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { apiClient } from '@/lib/api';
 import { authManager } from '@/lib/auth';
 
@@ -12,6 +11,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const notice = sessionStorage.getItem('auth_notice');
+    if (notice) {
+      setError(notice);
+      sessionStorage.removeItem('auth_notice');
+    }
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,16 +106,6 @@ export default function LoginPage() {
             {loading ? 'Вход...' : 'Войти'}
           </button>
         </form>
-
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <p className="text-center text-gray-600">
-            Нет аккаунта?{' '}
-            <Link href="/register" className="text-blue-600 hover:text-blue-800 font-medium">
-              Зарегистрироваться
-            </Link>
-          </p>
-        </div>
-
       </div>
     </div>
   );

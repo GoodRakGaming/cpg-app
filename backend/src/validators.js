@@ -73,6 +73,96 @@ const refreshTokenSchema = Joi.object({
     }),
 }).unknown(false);
 
+const PASSWORD_RULES = {
+  pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).+$/,
+  messages: {
+    'string.min': 'Пароль должен быть не менее 8 символов',
+    'string.pattern.base': 'Пароль должен содержать заглавные, строчные буквы, цифры и специальные символы',
+  },
+};
+
+/**
+ * Schema для создания пользователя админом (страница «Пользователи»)
+ */
+const createUserSchema = Joi.object({
+  email: Joi.string()
+    .email()
+    .required()
+    .messages({
+      'string.email': 'Некорректный email адрес',
+      'any.required': 'Email обязателен',
+    }),
+
+  password: Joi.string()
+    .min(8)
+    .pattern(PASSWORD_RULES.pattern)
+    .optional()
+    .messages(PASSWORD_RULES.messages),
+
+  first_name: Joi.string().max(100).optional().messages({
+    'string.max': 'Имя не должно превышать 100 символов',
+  }),
+
+  last_name: Joi.string().max(100).optional().messages({
+    'string.max': 'Фамилия не должна превышать 100 символов',
+  }),
+
+  role: Joi.string()
+    .valid('user', 'admin')
+    .optional()
+    .default('user')
+    .messages({
+      'any.only': 'Роль должна быть: user или admin',
+    }),
+}).unknown(false);
+
+/**
+ * Schema для смены собственного пароля
+ */
+const changePasswordSchema = Joi.object({
+  current_password: Joi.string().required().messages({
+    'any.required': 'Текущий пароль обязателен',
+  }),
+
+  new_password: Joi.string()
+    .min(8)
+    .required()
+    .pattern(PASSWORD_RULES.pattern)
+    .messages({
+      ...PASSWORD_RULES.messages,
+      'any.required': 'Новый пароль обязателен',
+    }),
+}).unknown(false);
+
+/**
+ * Schema для обновления пользователя админом (is_active/role)
+ */
+const updateUserSchema = Joi.object({
+  is_active: Joi.boolean().optional(),
+  role: Joi.string()
+    .valid('user', 'admin')
+    .optional()
+    .messages({
+      'any.only': 'Роль должна быть: user или admin',
+    }),
+})
+  .min(1)
+  .unknown(false)
+  .messages({
+    'object.min': 'Нужно передать хотя бы одно поле для обновления',
+  });
+
+/**
+ * Schema для сброса пароля админом (пароль опционален — если не передан, генерируется сервером)
+ */
+const resetPasswordSchema = Joi.object({
+  password: Joi.string()
+    .min(8)
+    .pattern(PASSWORD_RULES.pattern)
+    .optional()
+    .messages(PASSWORD_RULES.messages),
+}).unknown(false);
+
 /**
  * Schema для создания шаблона (будет использоваться в Фазе 3)
  */
@@ -209,4 +299,8 @@ module.exports = {
   updateTemplateSchema,
   proposalSchema,
   updateProposalSchema,
+  createUserSchema,
+  changePasswordSchema,
+  updateUserSchema,
+  resetPasswordSchema,
 };

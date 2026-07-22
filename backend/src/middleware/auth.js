@@ -4,12 +4,17 @@
  */
 
 const jwt = require('jsonwebtoken');
+const { User } = require('../models');
 
 /**
  * Middleware для защиты маршрутов
  * Использование: app.use('/api/protected', authenticateToken, routes);
+ *
+ * Дополнительно подгружает свежие role/is_active из БД на каждый запрос — refresh-токены
+ * в этом проекте полностью stateless, так что это единственный способ мгновенно отозвать
+ * доступ у деактивированного пользователя без ожидания истечения access-токена.
  */
-const authenticateToken = (req, res, next) => {
+const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
@@ -25,8 +30,20 @@ const authenticateToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.userId = decoded.userId;
-    req.user = decoded;
+
+    const user = await User.findByPk(decoded.userId, { attributes: ['id', 'role', 'is_active'] });
+    if (!user || !user.is_active) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          status: 401,
+          message: 'Аккаунт деактивирован или не найден',
+        },
+      });
+    }
+
+    req.userId = user.id;
+    req.user = { userId: user.id, email: decoded.email, role: user.role };
     next();
   } catch (error) {
     if (error.name === 'TokenExpiredError') {
@@ -47,6 +64,23 @@ const authenticateToken = (req, res, next) => {
       },
     });
   }
+};
+
+/**
+ * Middleware для эндпоинтов, требующих роль admin.
+ * Должен идти в цепочке ПОСЛЕ authenticateToken.
+ */
+const requireAdmin = (req, res, next) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      error: {
+        status: 403,
+        message: 'Требуются права администратора',
+      },
+    });
+  }
+  next();
 };
 
 /**
@@ -95,6 +129,7 @@ const verifyRefreshToken = (token) => {
 
 module.exports = {
   authenticateToken,
+  requireAdmin,
   generateToken,
   generateRefreshToken,
   verifyRefreshToken,

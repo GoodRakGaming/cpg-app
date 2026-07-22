@@ -29,6 +29,9 @@ export interface User {
   first_name?: string;
   last_name?: string;
   role: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AuthResponse {
@@ -184,6 +187,8 @@ class ApiClient {
       // Try to refresh token on 401, then retry once
       if (response.status === 401 && !_isRetry && typeof window !== 'undefined') {
         const refreshToken = localStorage.getItem('refresh_token');
+        let authNotice: string | null = null;
+
         if (refreshToken) {
           try {
             const refreshed = await this.refreshToken(refreshToken);
@@ -191,10 +196,25 @@ class ApiClient {
               this.setToken(refreshed.data.access_token);
               return this.request<T>(endpoint, { ...options, _isRetry: true });
             }
+            authNotice = refreshed.error?.message || null;
           } catch {
             // refresh failed — fall through to redirect
           }
         }
+
+        if (!authNotice) {
+          try {
+            const body = await response.json();
+            authNotice = body?.error?.message || null;
+          } catch {
+            // ignore — response body already consumed or not JSON
+          }
+        }
+
+        if (authNotice) {
+          sessionStorage.setItem('auth_notice', authNotice);
+        }
+
         this.clearToken();
         localStorage.removeItem('user');
         window.location.href = '/login';
@@ -222,13 +242,6 @@ class ApiClient {
   }
 
   // Auth endpoints
-  async register(email: string, password: string, firstName: string, lastName: string): Promise<ApiResponse<AuthResponse>> {
-    return this.request('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, first_name: firstName, last_name: lastName }),
-    });
-  }
-
   async login(email: string, password: string): Promise<ApiResponse<AuthResponse>> {
     const response = await this.request<AuthResponse>('/auth/login', {
       method: 'POST',
@@ -263,6 +276,39 @@ class ApiClient {
     }
 
     return response;
+  }
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<ApiResponse> {
+    return this.request('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    });
+  }
+
+  // User management endpoints (admin-only)
+  async getUsers(opts: { limit?: number; offset?: number; search?: string } = {}): Promise<ApiResponse<{ users: User[]; pagination: { total: number } }>> {
+    const { limit = 10, offset = 0, search } = opts;
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (search) params.set('search', search);
+    return this.request(`/users?${params.toString()}`, { method: 'GET' });
+  }
+
+  async createUser(payload: { email: string; first_name?: string; last_name?: string; role?: string; password?: string }): Promise<ApiResponse<{ user: User; temp_password: string }>> {
+    return this.request('/users', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateUser(id: string, payload: { is_active?: boolean; role?: string }): Promise<ApiResponse<{ user: User }>> {
+    return this.request(`/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async resetUserPassword(id: string): Promise<ApiResponse<{ temp_password: string }>> {
+    return this.request(`/users/${id}/reset-password`, { method: 'POST' });
   }
 
   // Template endpoints
