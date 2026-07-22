@@ -184,22 +184,21 @@ class ApiClient {
         credentials: 'include',
       });
 
-      // Try to refresh token on 401, then retry once
+      // Try to refresh token on 401, then retry once. The refresh token itself lives in an
+      // httpOnly cookie (set by the backend on login) and is sent automatically via
+      // `credentials: 'include'` — no need to hold a copy in localStorage.
       if (response.status === 401 && !_isRetry && typeof window !== 'undefined') {
-        const refreshToken = localStorage.getItem('refresh_token');
         let authNotice: string | null = null;
 
-        if (refreshToken) {
-          try {
-            const refreshed = await this.refreshToken(refreshToken);
-            if (refreshed.success && refreshed.data?.access_token) {
-              this.setToken(refreshed.data.access_token);
-              return this.request<T>(endpoint, { ...options, _isRetry: true });
-            }
-            authNotice = refreshed.error?.message || null;
-          } catch {
-            // refresh failed — fall through to redirect
+        try {
+          const refreshed = await this.refreshToken();
+          if (refreshed.success && refreshed.data?.access_token) {
+            this.setToken(refreshed.data.access_token);
+            return this.request<T>(endpoint, { ...options, _isRetry: true });
           }
+          authNotice = refreshed.error?.message || null;
+        } catch {
+          // refresh failed — fall through to redirect
         }
 
         if (!authNotice) {
@@ -250,10 +249,6 @@ class ApiClient {
 
     if (response.success && response.data?.access_token) {
       this.setToken(response.data.access_token);
-      // Also save refresh token if provided by backend
-      if (typeof window !== 'undefined' && response.data?.refresh_token) {
-        localStorage.setItem('refresh_token', response.data.refresh_token);
-      }
     }
 
     return response;
@@ -265,10 +260,14 @@ class ApiClient {
     return response;
   }
 
-  async refreshToken(refreshToken: string): Promise<ApiResponse<AuthResponse>> {
+  // Refresh token lives in an httpOnly cookie, sent automatically — nothing to pass here.
+  // `_isRetry: true` prevents `request()` from recursively retrying if this call itself 401s
+  // (e.g. the refresh token expired or the account was deactivated).
+  async refreshToken(): Promise<ApiResponse<AuthResponse>> {
     const response = await this.request<AuthResponse>('/auth/refresh', {
       method: 'POST',
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: JSON.stringify({}),
+      _isRetry: true,
     });
 
     if (response.success && response.data?.access_token) {

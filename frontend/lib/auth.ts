@@ -115,28 +115,3 @@ class AuthManager {
 }
 
 export const authManager = new AuthManager();
-
-export async function handleAuthError(statusCode: number) {
-  if (statusCode === 401) {
-    // Token expired or invalid
-    const refreshToken = authManager.getRefreshToken();
-    if (refreshToken) {
-      try {
-        const response = await apiClient.refreshToken(refreshToken);
-        if (response.success && response.data?.access_token) {
-          authManager.setTokens(response.data.access_token, refreshToken);
-          return true;
-        }
-      } catch (error) {
-        console.error('Token refresh failed:', error);
-      }
-    }
-    // Clear auth and redirect to login
-    authManager.clearTokens();
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login';
-    }
-    return false;
-  }
-  return true;
-}
