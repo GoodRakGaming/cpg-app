@@ -11,6 +11,8 @@ const Joi = require('joi');
 const registerSchema = Joi.object({
   email: Joi.string()
     .email()
+    .lowercase()
+    .trim()
     .required()
     .messages({
       'string.email': 'Некорректный email адрес',
@@ -49,6 +51,8 @@ const registerSchema = Joi.object({
 const loginSchema = Joi.object({
   email: Joi.string()
     .email()
+    .lowercase()
+    .trim()
     .required()
     .messages({
       'string.email': 'Некорректный email адрес',
@@ -87,6 +91,8 @@ const PASSWORD_RULES = {
 const createUserSchema = Joi.object({
   email: Joi.string()
     .email()
+    .lowercase()
+    .trim()
     .required()
     .messages({
       'string.email': 'Некорректный email адрес',

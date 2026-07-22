@@ -19,9 +19,14 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(255),
         allowNull: false,
         unique: true,
-        lowercase: true,
         validate: {
           isEmail: true,
+        },
+        // `lowercase: true` above was never a real Sequelize option (silently ignored) — a `set`
+        // hook is the actual way to normalize on every write, so e.g. "User@x.com" and "user@x.com"
+        // can't become two separate accounts (the unique index below is otherwise case-sensitive).
+        set(value) {
+          this.setDataValue('email', typeof value === 'string' ? value.trim().toLowerCase() : value);
         },
       },
       password_hash: {

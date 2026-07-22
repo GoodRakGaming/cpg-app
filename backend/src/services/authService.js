@@ -35,8 +35,8 @@ const generateTempPassword = () => {
  * Логин пользователя
  */
 const login = async (email, password) => {
-  // Ищем пользователя
-  const user = await User.findOne({ where: { email } });
+  // Ищем пользователя (email нормализован в нижний регистр — см. User-модель)
+  const user = await User.findOne({ where: { email: email.trim().toLowerCase() } });
   if (!user) {
     throw {
       status: 401,
@@ -124,7 +124,8 @@ const refreshAccessToken = async (refreshToken) => {
  * получать сессию созданного сотрудника.
  */
 const createUserByAdmin = async (email, password, firstName, lastName, role = 'user') => {
-  const existingUser = await User.findOne({ where: { email } });
+  const normalizedEmail = email.trim().toLowerCase();
+  const existingUser = await User.findOne({ where: { email: normalizedEmail } });
   if (existingUser) {
     throw {
       status: 409,
@@ -136,7 +137,7 @@ const createUserByAdmin = async (email, password, firstName, lastName, role = 'u
   const passwordHash = await bcryptjs.hash(tempPassword, 10);
 
   const user = await User.create({
-    email,
+    email: normalizedEmail,
     password_hash: passwordHash,
     first_name: firstName,
     last_name: lastName,
