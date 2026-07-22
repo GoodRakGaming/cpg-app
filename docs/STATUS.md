@@ -1,301 +1,56 @@
-# 📊 Статус проекта Commercial Proposal Generator
+# 📊 Статус проекта
 
-**Обновлено:** 2026-07-17  
-**Версия:** Beta, развёрнута на продакшн-домене  
-**Ответственный за обновление:** System
+**Обновлено:** 2026-07-22
+**Стабильная версия:** git-тег `stable-2026-07-22`
+**Развёрнуто:** https://cp.profstroi74.ru (см. [DEPLOYMENT.md](DEPLOYMENT.md))
 
----
-
-## 📈 Прогресс проекта
-
-### Основной roadmap (Фазы 1-8): **~81% Complete** (6.5 из 8 фаз)
-
-```
-████████████████████████████████░░░░░░░░ 81%
-Completed: 6 phases (1-5, 7+7.2) | In progress: Phase 8 (deployment, основное сделано) | Remaining: Phase 6
-```
-
-### Дополнительные фазы (за рамками исходных 8)
-
-Добавлены позже, не входят в дробь выше — отдельный трек, отсчёт с нуля:
-
-| Фаза | Статус |
-|------|--------|
-| Phase 9 — визуальный редизайн КП | ✅ Реализовано |
-| Phase 9B — редизайн веб-интерфейса | ✅ Реализовано |
-| Phase 10 — AI-анализ рынка и каталог цен | 📝 План |
-
-Приложение развёрнуто и доступно публично: **https://cp.profstroi74.ru** (LXC-контейнер на домашнем Proxmox-сервере). Подробности инфраструктуры, деплоя и известных незакрытых вопросов — в [DEPLOYMENT.md](DEPLOYMENT.md).
+Для архитектуры, стека и справочника API — см. **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 ---
 
-## ✅ Завершенные компоненты
+## Текущее состояние
 
-### Phase 1: Backend Foundation ✅
-- Express.js сервер на порту 3000
-- PostgreSQL подключение (Sequelize ORM)
-- Базовая структура Express app
-- Error handling middleware
+Приложение в проде, используется реальными клиентами. Основной функционал (шаблоны, КП с
+версионированием, PDF-генерация, управление пользователями) реализован и работает.
 
-### Phase 2: Database Schema & Auth ✅
-- User model (email, password_hash, created_at)
-- Template model с JSONB данными
-- Proposal & ProposalVersion моделі
-- JWT аутентификация (access + refresh tokens)
-- 4 Auth endpoints (register, login, logout, refresh)
+- ✅ **Backend** — Express API: auth, users (admin), templates, proposals, PDF-генерация
+- ✅ **Frontend** — Next.js, единая дизайн-система (токены/компоненты), все основные экраны
+- ✅ **Безопасность** — публичная регистрация закрыта, аккаунты создаёт админ (см. changelog ниже)
+- ✅ **PDF** — визуальный редизайн под реальный образец заказчика (реквизиты, разделы, подписи)
 
-### Phase 3: Template CRUD API ✅
-- 7 endpoints для управления шаблонами
-- Версионирование шаблонов
-- CRUD операции (Create, Read, Update, Delete)
-- Валидация и обработка ошибок
-- 100% test coverage
+### В планах
 
-### Phase 4: Proposal CRUD API ✅
-- 7 endpoints для предложений
-- Версионирование с историей изменений
-- Restore функциональность (откат версий)
-- Автоматическое создание черновиков
-- 100% test coverage
+- 📝 **Phase 10** — AI-анализ рынка и каталог цен (план в [PLANNING/PHASE_10_AI_PRICE_INTELLIGENCE.md](PLANNING/PHASE_10_AI_PRICE_INTELLIGENCE.md))
+- Расширенные функции (уведомления, экспорт в Excel/Word, email-рассылка КП) — не приоритет
 
-### Phase 5: PDF Generation & Export ✅
-- Puppeteer интеграция для HTML → PDF
-- 4 PDF endpoints (generate, download, export, status)
-- Browser pooling для оптимизации памяти
-- Асинхронная генерация с обработкой очереди
-- 100% test coverage
+### Известный технический долг
 
-### Phase 7: Frontend Core ✅
-- Next.js с App Router
-- React компоненты на TypeScript
-- Tailwind CSS стилизация
-- JWT token management (localStorage + httpOnly cookie)
-- Login страница (`/login`) ✅
-- Register страница (`/register`) ✅
-- Dashboard layout с nav (`/dashboard/`) ✅
-- Proposals список (`/dashboard/proposals`) ✅
-
-### Phase 7.2: Frontend Extended UI ✅
-- Proposal Editor (`/dashboard/proposals/[id]`) ✅ — редактирование title, status, description
-- Proposal versions tab с restore ✅
-- PDF генерация и скачивание ✅
-- Create Proposal (`/dashboard/proposals/new`) ✅
-- Templates Manager (`/dashboard/templates`) ✅ — список + удаление
-- Template Editor (`/dashboard/templates/[id]`) ✅ — визуальная форма (позиции + условия)
-- Create Template (`/dashboard/templates/new`) ✅ — визуальная форма
-
-**Исправленные баги:**
-- `created_at` → `createdAt` в proposals.js (Sequelize underscored) — было "Invalid Date" везде
-- Unwrapping `data.proposal` для single proposal API response
-- PDF статус: проверка `is_cached` вместо несуществующего `status === 'ready'`
-- PDF download URL: динамический hostname вместо захардкоженного localhost
-- Отсутствующий endpoint `POST /api/proposals/:id/versions/:version_id/restore` — добавлен
-- Убраны debug console.log из login.tsx
-- Дата версии показывала `01.01.1970` — модель `ProposalVersion` объявляла колонку `createdAt` без `defaultValue`, из-за чего Sequelize слал явный `NULL` в INSERT, перебивая `DEFAULT CURRENT_TIMESTAMP` в схеме БД; добавлен `defaultValue: DataTypes.NOW`
-- Preview/скачивание PDF падали с `Failed to fetch` на проде — код в `proposals/[id]/page.tsx` хардкодил `http://{hostname}:3000/api` в обход `NEXT_PUBLIC_API_URL`; заменено на общий `API_BASE_URL` из `lib/api.ts`
-- Пароль при регистрации отклонялся с неинформативной ошибкой — regex валидации принимал спецсимвол только из узкого списка `@$!%*?&`; расширено до любого не-буквенно-цифрового символа
-- Удалён мёртвый дублирующий файл `backend/src/validators/index.js` (Node резолвил `.js`-файл раньше одноимённой директории, так что этот код никогда не выполнялся, но вводил в заблуждение при чтении)
-- Убрана плашка с демо-учётными данными (`test@example.com` / `Test123!`) со страницы логина — приложение теперь публичный продакшн, не демо-стенд
-- Скачивание/экспорт PDF падали `HTTP 500: Invalid character in header content` — заголовок `Content-Disposition` собирался напрямую из `proposal.title` (кириллица), а HTTP-заголовки допускают только ISO-8859-1; добавлено RFC 5987 кодирование (`filename*=UTF-8''...`) с ASCII-фолбэком
-- **Переработана логика версионирования КП** (по итогам тестирования):
-  - `PUT /proposals/:id` теперь сравнивает новые данные с текущей версией (`diffProposalData`) и создаёт новую версию только при реальных изменениях — раньше каждое нажатие "Сохранить" плодило версию, даже без изменений
-  - Комментарий версии теперь — короткое автоописание изменений ("Изменена цена", "Добавлено позиций: 1" и т.д.) вместо общего "Версия N"; отображается в таблице истории версий
-  - Restore версии стал не создающим новую запись (просто переключает `current_version_id` на выбранную версию) — раньше каждое восстановление плодило версию-дубликат содержимого, что путало историю. Ничего не теряется: версия, которую заменили, остаётся в истории
-
-### Phase 9: Визуальный редизайн КП ✅
-- Модель данных и PDF-шаблон приведены к виду, ожидаемому заказчиком (реквизиты юрлица, подписант,
-  логотип/скан подписи/печати, разделы позиций) — см.
-  [PHASE_9_KP_VISUAL_REDESIGN.md](PLANNING/PHASE_9_KP_VISUAL_REDESIGN.md)
-- Единая палитра/токены (OKLCH) зафиксированы и переиспользованы в Phase 9B для веб-интерфейса
-
-### Phase 9B: Редизайн веб-интерфейса ✅
-Итоги дизайн-сессии и токены — [PHASE_9B_FRONTEND_UI_REDESIGN.md](PLANNING/PHASE_9B_FRONTEND_UI_REDESIGN.md).
-Реализовано поэтапно, экран за экраном:
-- Дизайн-токены, шрифты (Inter/JetBrains Mono), базовые компоненты (`Button`, `Badge`, `Input`, `Card`, `SaveBar`)
-- Списки шаблонов/КП — поиск, фильтр-чипы по статусу, пагинация (+ `?search=` на бэкенде `GET /templates`, `GET /proposals`)
-- Редактор шаблона — карточки-секции, закреплённая панель сохранения со статусом «Сохранено · HH:MM»
-- Редактор КП — вкладки убраны, живая мини-превьюшка PDF сбоку (масштаб через CSS `zoom` внутри iframe,
-  не `transform`, иначе не сжимается layout-бокс), кнопка «Версии» открывает историю модальным окном
-  вместо постоянной вкладки, позиции — общий с шаблоном компонент (`ItemsEditor`, единицы измерения — select)
-- Верхнее меню заменено на вертикальный `NavRail` (56px, sticky на всю высоту вьюпорта)
+- Ежедневный `pg_dump` БД не настроен — есть только еженедельный бэкап всего LXC-контейнера
+  (Proxmox). Стоит добавить, см. [DEPLOYMENT.md](DEPLOYMENT.md).
+- Docker/CI не используются — LXC + pm2 + push-to-deploy признано достаточным для текущего масштаба.
 
 ---
 
-## ⏳ В разработке (Future Scope)
+## Changelog (основные вехи)
 
-### Phase 6: Advanced Backend Features ⏳
-- Notifications API
-- Export в другие форматы (Excel, Word)
-- Email отправка КП
-- Статистика и аналитика
+**2026-07-22 — Access Control Hardening.** Публичная регистрация закрыта (проработала открытой
+несколько дней в проде — риск: любой мог создать аккаунт и получить доступ ко всем шаблонам).
+Теперь аккаунты создаёт админ со страницы «Пользователи» (`/dashboard/users`). `role`/`is_active`
+проверяются на каждый запрос из БД — деактивация действует мгновенно. Защита от «обезглавливания»
+(нельзя убрать последнего активного админа). Rate limit на `/login`. Добавлена самостоятельная
+смена пароля. Предложения (КП) сделаны общими для всех сотрудников (были приватными per-user).
+Плюс мелкие фиксы: версионирование КП по изменению раздела позиции, `Invalid Date` после
+сохранения, вёрстка шапки PDF, обрезание попап-меню в NavRail, формулировка ошибки истёкшей сессии.
 
-### Phase 8: Deployment & Optimization 🔶 приостановлено (основное сделано)
-- ✅ Production deployment — LXC на Proxmox, домен `cp.profstroi74.ru` через Nginx Proxy Manager + Let's Encrypt
-- ✅ Push-to-deploy пайплайн (git push на bare-репозиторий → post-receive hook → build → pm2 reload), без Docker/CI
-- ✅ Ручное end-to-end тестирование на проде: регистрация, логин, шаблоны, КП, версии, PDF preview/download — всё работает
-- ⏳ Docker-контейнеризация — не делали, решили что не нужна для текущего масштаба (LXC + pm2 достаточно)
-- ⏳ CI/CD pipeline (GitHub Actions) — рассматривали self-hosted runner для авто-деплоя на push, отложили; сейчас деплой запускается вручную командой `git push production main`
-- ⏳ Performance optimization — не делали
-- Работа над деплоем сознательно приостановлена 2026-07-15 — базовая инфраструктура и пайплайн готовы и проверены, оставшиеся пункты не блокируют использование
-- Открытые вопросы и чек-лист "что доделать" — в [DEPLOYMENT.md](DEPLOYMENT.md)
+**2026-07-15/17 — Phase 9 / 9B.** Визуальный редизайн PDF-документа под реальный образец заказчика
+(реквизиты, логотип, подписант, разделы позиций) и полный редизайн веб-интерфейса (дизайн-токены,
+NavRail, списки с поиском/пагинацией, редакторы шаблона/КП с live PDF-превью). Подробности —
+[PLANNING/PHASE_9_KP_VISUAL_REDESIGN.md](PLANNING/PHASE_9_KP_VISUAL_REDESIGN.md) и
+[PLANNING/PHASE_9B_FRONTEND_UI_REDESIGN.md](PLANNING/PHASE_9B_FRONTEND_UI_REDESIGN.md).
 
----
+**2026-07-15 — Деплой.** Приложение развёрнуто на домашнем Proxmox-сервере (LXC + PM2,
+push-to-deploy без Docker/CI), домен подключён через Nginx Proxy Manager. Подробности —
+[DEPLOYMENT.md](DEPLOYMENT.md).
 
-## 📊 API Endpoints: Статус
-
-| Категория | Endpoint | Метод | Статус | Тесты |
-|-----------|----------|--------|--------|-------|
-| **Auth** | /api/auth/register | POST | ✅ | ✅ |
-| | /api/auth/login | POST | ✅ | ✅ |
-| | /api/auth/logout | POST | ✅ | ✅ |
-| | /api/auth/refresh | POST | ✅ | ✅ |
-| **Templates** | /api/templates | GET | ✅ | ✅ |
-| | /api/templates | POST | ✅ | ✅ |
-| | /api/templates/:id | GET | ✅ | ✅ |
-| | /api/templates/:id | PUT | ✅ | ✅ |
-| | /api/templates/:id | DELETE | ✅ | ✅ |
-| | /api/templates/:id/versions | GET | ✅ | ✅ |
-| | /api/templates/:id/restore/:version | POST | ✅ | ✅ |
-| **Proposals** | /api/proposals | GET | ✅ | ✅ |
-| | /api/proposals | POST | ✅ | ✅ |
-| | /api/proposals/:id | GET | ✅ | ✅ |
-| | /api/proposals/:id | PUT | ✅ | ✅ |
-| | /api/proposals/:id | DELETE | ✅ | ✅ |
-| | /api/proposals/:id/versions | GET | ✅ | ✅ |
-| | /api/proposals/:id/restore/:version | POST | ✅ | ✅ |
-| **PDF** | /api/pdf/generate | POST | ✅ | ✅ |
-| | /api/pdf/download/:id | GET | ✅ | ✅ |
-| | /api/pdf/export/:id | GET | ✅ | ✅ |
-| | /api/pdf/status/:id | GET | ✅ | ✅ |
-
-**Всего endpoints:** 20 | **Готовых:** 20 ✅ | **В разработке:** 0
-
----
-
-## 🧪 Тестирование
-
-| Компонент | Тесты | Статус |
-|-----------|-------|--------|
-| Auth API | 5/5 | ✅ 100% |
-| Templates API | 5/5 | ✅ 100% |
-| Proposals API | 5/5 | ✅ 100% |
-| PDF Generation | 5/5 | ✅ 100% |
-| **ИТОГО** | **20/20** | **✅ 100%** |
-
-> Фронтенд полностью реализован (Phase 7 + 7.2). Все ключевые баги исправлены. Остаётся Phase 6 (расширенный backend) и Phase 8 (деплой).
-
----
-
-## 🗄️ База данных
-
-| Таблица | Статус | Миграция | Notes |
-|---------|--------|----------|-------|
-| users | ✅ | 001_initial_schema.sql | Хеширование паролей + JWT |
-| templates | ✅ | 001_initial_schema.sql | JSONB для данных, версионирование |
-| proposals | ✅ | 001_initial_schema.sql | Черновики, версионирование, статусы |
-| proposal_versions | ✅ | 001_initial_schema.sql | История изменений |
-
----
-
-## 🛠️ Tech Stack
-
-| Слой | Технология | Версия | Статус |
-|------|------------|--------|--------|
-| **Frontend** | Next.js | 14+ | ✅ |
-| | React | 18+ | ✅ |
-| | TypeScript | 5+ | ✅ |
-| | Tailwind CSS | 3+ | ✅ |
-| **Backend** | Node.js | 14+ | ✅ |
-| | Express | 4+ | ✅ |
-| | Sequelize | 6+ | ✅ |
-| **Database** | PostgreSQL | 12+ | ✅ |
-| **PDF** | Puppeteer | 21+ | ✅ |
-| **Auth** | JWT | - | ✅ |
-
----
-
-## 🚀 Демо-данные
-
-| Тип | Значение | Статус |
-|-----|----------|--------|
-| Демо пользователь | test@example.com | ✅ Auto-created |
-| Демо пароль | Test123! | ✅ Auto-created |
-| Демо шаблон | "Стандартный шаблон" | ✅ Auto-seeded |
-| Демо предложение | "Пример КП" | ✅ Auto-seeded |
-
----
-
-## 📋 Критические проблемы
-
-**Статус:** ✅ Критических проблем нет. MVP полностью функционален.
-
----
-
-## 📝 Важные замечания
-
-### Требования к окружению
-
-```
-- Node.js: v14 или выше (рекомендуется v18+)
-- PostgreSQL: v12 или выше
-- RAM: минимум 2GB (для Puppeteer browser pool)
-- Диск: 500MB свободного места
-```
-
-### Порты
-
-- **Backend API:** 3000 (Express)
-- **Frontend UI:** 3001 (Next.js)
-- **PostgreSQL:** 5432 (по умолчанию)
-
-### Переменные окружения
-
-Основные переменные в `.env` файлах:
-- `DATABASE_URL` — подключение к PostgreSQL
-- `JWT_SECRET` — секрет для подписи JWT
-- `NODE_ENV` — development/production
-- `CORS_ORIGIN` — CORS для фронтенда
-
----
-
-## 📅 История обновлений
-
-| Дата | Версия | Изменения |
-|------|--------|-----------|
-| 2026-07-17 | Beta | Phase 9B ✅ Complete. Редизайн веб-интерфейса поэтапно: токены/компоненты → списки → редактор шаблона → редактор КП (мини-превью PDF) → NavRail |
-| 2026-05-21 | Beta | Phase 7+7.2 ✅ Complete. Исправлены баги A-D, добавлен visual template editor, description field в proposals, restore endpoint |
-| 2026-05-20 | Beta | Phase 5 завершена, миграция документации |
-| 2026-05-19 | Beta | Phase 7 (Frontend Core) завершена |
-| 2026-05-18 | Beta | Phase 5 (PDF Generation) завершена |
-| 2026-05-17 | Beta | Phase 4 (Proposals API) завершена |
-| 2026-05-16 | Beta | Phase 3 (Templates API) завершена |
-
----
-
-## 🔄 Следующие шаги
-
-### Ближайшие приоритеты (в этом порядке)
-
-1. **[Phase 10: AI-анализ рынка и каталог цен](PLANNING/PHASE_10_AI_PRICE_INTELLIGENCE.md)** —
-   Nextcloud + n8n + локальный LLM автоматически извлекают цены на работы из документов
-   (свои старые КП / прайсы поставщиков / конкурентов) в каталог, который подсказывает цены
-   при создании нового КП. Требует отдельно разворачиваемого локального AI-инференса (GPU).
-
-### Долгосрочный план
-
-- Phase 6: Advanced Backend Features (Notifications, Exports) — отложено, не приоритет
-- Phase 10: AI-анализ рынка и каталог цен (см. выше)
-- Post-Launch: Performance, Analytics, Advanced Features
-
----
-
-## 📞 Контакты & Поддержка
-
-**Документация:** `/docs/` (начните с [README.md](README.md))  
-**Проблемы:** Смотрите [TROUBLESHOOTING](TROUBLESHOOTING/COMMON_ISSUES.md)  
-**Тестирование:** [QUICK_TEST_5_MIN](TESTING/QUICK_TEST_5_MIN.md)
-
----
-
-**Последнее обновление:** 2026-07-17  
-**Следующее плановое обновление:** При завершении Phase 10 или Phase 6
+**До 2026-07 — Основа.** Backend (auth, шаблоны, КП с версионированием, PDF-генерация) и frontend
+(Next.js, все основные экраны) реализованы и вручную протестированы end-to-end.

@@ -35,3 +35,15 @@ Thumbs.db
 .turbo/
 dist/
 build/
+
+# Old/historical docs — kept locally on the dev machine only, not pushed to
+# GitHub or production. Active docs live directly in docs/ (README/STATUS/
+# ARCHITECTURE/DEPLOYMENT) and docs/PLANNING/.
+docs/ARCHIVES/
+docs/BACKEND/
+docs/FRONTEND/
+docs/TESTING/
+docs/TROUBLESHOOTING/
+docs/GETTING_STARTED/
+docs/ARCHITECTURE/
+docs/_INDEX.md
