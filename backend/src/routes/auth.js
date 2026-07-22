@@ -50,22 +50,15 @@ router.post('/login', loginRateLimiter, async (req, res, next) => {
     // Логиним пользователя
     const result = await authService.login(value.email, value.password);
 
-    // Устанавливаем refresh token в httpOnly cookie
+    // Устанавливаем refresh token в httpOnly cookie. Secure — когда фронт за HTTPS
+    // (прод за Nginx Proxy Manager); локальная разработка идёт по http://localhost,
+    // там флаг опускается.
     res.cookie('refreshToken', result.tokens.refresh_token, {
       httpOnly: true,
-      secure: false, // localhost doesn't support secure cookies
-      sameSite: 'lax', // More permissive for localhost development
-      path: '/',      // Available on all paths
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 дней
-    });
-
-    // Also set access token in regular (non-httpOnly) cookie for middleware
-    res.cookie('accessToken', result.tokens.access_token, {
-      httpOnly: false, // Readable by JavaScript - needed for CORS
-      secure: false,
+      secure: (process.env.FRONTEND_URL || '').startsWith('https'),
       sameSite: 'lax',
       path: '/',
-      maxAge: 15 * 60 * 1000, // 15 minutes (same as JWT expiry)
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 дней
     });
 
     return res.status(200).json({
