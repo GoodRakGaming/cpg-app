@@ -119,6 +119,7 @@ export interface Proposal {
   title: string;
   status: 'draft' | 'final' | 'archived';
   template_id: string;
+  template_name?: string;
   user_id: string;
   current_version_id: string;
   pdf_hash?: string;
@@ -360,7 +361,7 @@ class ApiClient {
     return this.request(`/proposals/${id}`, { method: 'GET' });
   }
 
-  async updateProposal(id: string, payload: { title?: string; status?: string; data?: Record<string, any> }): Promise<ApiResponse<{ proposal: Proposal }>> {
+  async updateProposal(id: string, payload: { title?: string; status?: string; template_id?: string; data?: Record<string, any> }): Promise<ApiResponse<{ proposal: Proposal }>> {
     return this.request(`/proposals/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),

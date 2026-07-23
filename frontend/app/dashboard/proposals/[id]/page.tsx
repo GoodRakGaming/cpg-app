@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { apiClient, Proposal, ProposalVersion, API_BASE_URL } from '@/lib/api';
+import { apiClient, Proposal, ProposalVersion, Template, API_BASE_URL } from '@/lib/api';
 import { useProposalForm } from '@/lib/useProposalForm';
 import { ProposalFormSections } from '@/components/proposals/ProposalFormSections';
 import { VersionsModal } from '@/components/proposals/VersionsModal';
@@ -25,6 +25,8 @@ export default function ProposalEditorPage() {
   const form = useProposalForm();
 
   const [proposal, setProposal] = useState<Proposal | null>(null);
+  const [templateId, setTemplateId] = useState<string>('');
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,8 +54,10 @@ export default function ProposalEditorPage() {
       const response = await apiClient.getProposal(id);
       if (response.success && response.data?.proposal) {
         setProposal(response.data.proposal);
+        setTemplateId(response.data.proposal.template_id);
         form.loadFrom(response.data.proposal);
         handlePreviewPDF();
+        loadTemplates();
       } else {
         setError('Ошибка загрузки предложения');
       }
@@ -62,6 +66,18 @@ export default function ProposalEditorPage() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTemplates = async () => {
+    try {
+      const response = await apiClient.getTemplates({ limit: 100 });
+      if (response.success && response.data?.templates) {
+        setTemplates(response.data.templates);
+      }
+    } catch (err) {
+      // Не критично: без списка селект покажет только текущий шаблон
+      console.error('Ошибка загрузки списка шаблонов:', err);
     }
   };
 
@@ -91,6 +107,7 @@ export default function ProposalEditorPage() {
       const response = await apiClient.updateProposal(id, {
         title: form.title,
         status: form.status,
+        template_id: templateId || undefined,
         data: form.buildData(proposal?.data),
       });
       if (response.success && response.data?.proposal) {
@@ -229,7 +246,13 @@ export default function ProposalEditorPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div>
-          <ProposalFormSections form={form} />
+          <ProposalFormSections
+            form={form}
+            templateId={templateId}
+            templateName={proposal.template_name}
+            templates={templates}
+            onTemplateChange={setTemplateId}
+          />
           <SaveBar
             onSave={handleSave}
             onCancel={() => router.push('/dashboard/proposals')}

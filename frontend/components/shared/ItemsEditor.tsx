@@ -26,9 +26,17 @@ export function ItemsEditor({
   const { items, updateItem, blurNumeric, addItem, removeItem, total } = state;
 
   return (
-    <Card className="overflow-hidden">
-      <div className="flex items-center justify-between border-b border-line px-5 py-4">
-        <div className="text-sm font-bold text-ink">{label}</div>
+    // Без overflow-hidden: он ломает position: sticky у плашки (карточка стала бы
+    // scroll-контейнером); углы скругляются на самой плашке и подвале
+    <Card>
+      {/* Плашка закреплена при прокрутке: название, итог и кнопка добавления всегда видны */}
+      <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-card border-b border-line bg-surface-1 px-5 py-4">
+        <div className="flex items-baseline gap-3">
+          <div className="text-sm font-bold text-ink">{label}</div>
+          <div className="text-xs text-muted">
+            Итого: <span className="font-mono text-accent">{total.toLocaleString('ru-RU')} руб.</span>
+          </div>
+        </div>
         <button type="button" onClick={addItem} className="text-sm font-semibold text-accent hover:text-accent-hover">
           + Добавить позицию
         </button>
@@ -100,8 +108,17 @@ export function ItemsEditor({
             </div>
           </div>
         ))}
+        {/* Дублирующая кнопка внизу: при длинном списке новая позиция добавляется в конец —
+            заполнять её удобно, не прокручивая наверх и обратно */}
+        <button
+          type="button"
+          onClick={addItem}
+          className="rounded-nested border border-dashed border-line py-3 text-sm font-semibold text-accent transition-colors hover:border-accent hover:bg-accent-soft"
+        >
+          + Добавить позицию
+        </button>
       </div>
-      <div className="border-t border-line px-5 py-3 text-right text-sm font-medium text-text">
+      <div className="rounded-b-card border-t border-line px-5 py-3 text-right text-sm font-medium text-text">
         Итого: <span className="font-mono text-accent">{total.toLocaleString('ru-RU')} руб.</span>
       </div>
     </Card>

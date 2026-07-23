@@ -345,6 +345,23 @@ router.put('/:id', authenticateToken, async (req, res, next) => {
     if (value.title !== undefined) proposal.title = value.title;
     if (value.status !== undefined) proposal.status = value.status;
 
+    // Смена шаблона: влияет на реквизиты/логотип/подписанта/условия во всех будущих PDF этого КП
+    if (value.template_id !== undefined && value.template_id !== proposal.template_id) {
+      const template = await Template.findOne({
+        where: { id: value.template_id, is_active: true },
+      });
+      if (!template) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            status: 404,
+            message: 'Шаблон не найден или деактивирован',
+          },
+        });
+      }
+      proposal.template_id = value.template_id;
+    }
+
     // Новую версию создаём только если данные реально изменились —
     // иначе каждое нажатие "Сохранить" плодило бы версии-дубликаты
     if (value.data !== undefined) {

@@ -1,8 +1,10 @@
+import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { ItemsEditor } from '@/components/shared/ItemsEditor';
 import { ProposalForm } from '@/lib/useProposalForm';
+import { Template } from '@/lib/api';
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
@@ -25,7 +27,19 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const SELECT_CLASS =
   'w-full rounded-control border border-line bg-surface-1 px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent-soft';
 
-export function ProposalFormSections({ form }: { form: ProposalForm }) {
+export function ProposalFormSections({
+  form,
+  templateId,
+  templateName,
+  templates,
+  onTemplateChange,
+}: {
+  form: ProposalForm;
+  templateId: string;
+  templateName?: string;
+  templates: Template[];
+  onTemplateChange: (id: string) => void;
+}) {
   const {
     title, setTitle,
     status, setStatus,
@@ -34,11 +48,16 @@ export function ProposalFormSections({ form }: { form: ProposalForm }) {
     kpNumber, setKpNumber,
     kpDate, setKpDate,
     recipient, setRecipient,
-    validDays, setValidDays,
     vatNote, setVatNote,
     includeSignature, setIncludeSignature,
     includeStamp, setIncludeStamp,
   } = form;
+
+  // Если список шаблонов ещё не загружен (или текущий шаблон деактивирован и не попал в
+  // список), селект всё равно должен показывать текущий выбор
+  const templateOptions = templates.some((t) => t.id === templateId)
+    ? templates
+    : [...(templateId ? [{ id: templateId, name: templateName || 'Текущий шаблон' } as Template] : []), ...templates];
 
   return (
     <div className="flex flex-col gap-4">
@@ -58,6 +77,26 @@ export function ProposalFormSections({ form }: { form: ProposalForm }) {
               <option value="archived">Архивирован</option>
             </select>
           </Field>
+          <div className="sm:col-span-2">
+            <div className="mb-1 flex items-center justify-between">
+              <label className="block text-xs text-muted">Шаблон (реквизиты, подписант, условия)</label>
+              {templateId && (
+                <Link href={`/dashboard/templates/${templateId}`} className="text-xs text-accent hover:text-accent-hover">
+                  Открыть шаблон →
+                </Link>
+              )}
+            </div>
+            <select value={templateId} onChange={(e) => onTemplateChange(e.target.value)} className={SELECT_CLASS}>
+              {templateOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-muted">
+              Смена шаблона применится после сохранения и изменит реквизиты компании в PDF.
+            </p>
+          </div>
           <div className="sm:col-span-2">
             <Field label="Описание предложения">
               <textarea
@@ -82,15 +121,10 @@ export function ProposalFormSections({ form }: { form: ProposalForm }) {
           <Field label="Дата КП">
             <Input type="date" value={kpDate} onChange={(e) => setKpDate(e.target.value)} />
           </Field>
-          <Field label="Действительно, дн.">
-            <Input
-              type="number"
-              min={0}
-              value={validDays}
-              onChange={(e) => setValidDays(e.target.value === '' ? '' : Number(e.target.value))}
-              placeholder="14"
-            />
-          </Field>
+          {/* Поле «Действительно, дн.» временно скрыто (2026-07-23): строка «дата · действительно
+              N дн.» убрана из PDF по запросу заказчика (срок действия дублируется в «Условиях»).
+              Данные validDays в useProposalForm сохранены — для возврата раскомментировать здесь
+              и вернуть мета-строку в pdfService.js. */}
           <div className="sm:col-span-3">
             <label className="mb-1 block text-xs text-muted">Получатель</label>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

@@ -276,6 +276,13 @@ const updateProposalSchema = Joi.object({
       'string.max': 'Название не должно превышать 255 символов',
     }),
 
+  template_id: Joi.string()
+    .uuid()
+    .optional()
+    .messages({
+      'string.guid': 'ID шаблона должен быть валидным UUID',
+    }),
+
   status: Joi.string()
     .valid('draft', 'final', 'archived')
     .optional()

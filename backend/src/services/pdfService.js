@@ -382,7 +382,6 @@ function generateProposalHtml(proposal, template) {
     ? proposalData.items
     : (Array.isArray(templateData.items) ? templateData.items : []);
 
-  const kpDate = formatDate(proposalData.date);
   const itemsTable = renderItemsTable(displayItems);
 
   const html = `
@@ -552,14 +551,6 @@ function generateProposalHtml(proposal, template) {
       padding: 2mm;
     }
 
-    /* ── footer ── */
-    .doc-footer {
-      margin-top: 10mm;
-      padding-top: 3mm;
-      border-top: 1px solid var(--line);
-      font-size: 7.5pt;
-      color: var(--muted);
-    }
   </style>
 </head>
 <body>
@@ -568,7 +559,9 @@ function generateProposalHtml(proposal, template) {
     ${renderRecipient(proposalData.recipient)}
 
     <h1 class="doc-title">Коммерческое предложение</h1>
-    <div class="doc-meta">${kpDate}${proposalData.validDays ? ` · действительно ${esc(proposalData.validDays)} дн.` : ''}</div>
+    <!-- Мета-строка (дата · срок действия) убрана по запросу заказчика 2026-07-23: дата уже есть
+         в шапке («от …»), срок действия — в «Условиях». Если попросят вернуть:
+         <div class="doc-meta">${'$'}{formatDate(proposalData.date)} · действительно N дн.</div> -->
 
     ${proposalData.description ? `<div class="section">${renderTextBlock(proposalData.description)}</div>` : ''}
 
@@ -582,8 +575,6 @@ function generateProposalHtml(proposal, template) {
     </div>` : ''}
 
     ${renderSignature(templateData.signer, templateData.company, proposalData.includeSignature !== false, proposalData.includeStamp !== false)}
-
-    <div class="doc-footer">${templateData.footer ? esc(templateData.footer) : `Документ сформирован ${formatDate()}`}</div>
   </div>
 </body>
 </html>
