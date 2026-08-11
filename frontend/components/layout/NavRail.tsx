@@ -30,7 +30,35 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
+  {
+    href: '/dashboard/price-catalog-reference',
+    label: 'Справочник цен',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={18} height={18}>
+        <path d="M4 4h11a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3V4Z" />
+        <path d="M7 4v13a3 3 0 0 0 0 6h11" />
+        <path d="M8.5 8.5h6M8.5 12h6" />
+      </svg>
+    ),
+  },
+  {
+    href: '/dashboard/price-catalog',
+    label: 'Проверка цен',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" width={18} height={18}>
+        <path d="M9 12.5l2 2 4-4.5" />
+        <circle cx="12" cy="12" r="9" />
+      </svg>
+    ),
+  },
 ];
+
+// pathname.startsWith(href) ложно совпадает, когда один href — префикс другого
+// (например, /dashboard/price-catalog внутри /dashboard/price-catalog-reference) —
+// проверяем точное совпадение или границу сегмента пути.
+function isActivePath(pathname: string | null, href: string): boolean {
+  return pathname === href || (pathname?.startsWith(`${href}/`) ?? false);
+}
 
 function initials(user: AuthUser): string {
   const first = user.first_name?.[0] || '';
@@ -74,7 +102,7 @@ export function NavRail({ user, onLogout }: { user: AuthUser; onLogout: () => vo
       </Link>
 
       {NAV_ITEMS.map((item) => {
-        const active = pathname?.startsWith(item.href);
+        const active = isActivePath(pathname, item.href);
         return (
           <Link
             key={item.href}
@@ -94,7 +122,7 @@ export function NavRail({ user, onLogout }: { user: AuthUser; onLogout: () => vo
           href="/dashboard/users"
           title="Пользователи"
           className={`flex h-[34px] w-[34px] items-center justify-center rounded-control transition-colors ${
-            pathname?.startsWith('/dashboard/users') ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-surface-1 hover:text-ink'
+            isActivePath(pathname, '/dashboard/users') ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-surface-1 hover:text-ink'
           }`}
         >
           {USERS_ICON}

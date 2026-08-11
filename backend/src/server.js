@@ -21,7 +21,7 @@ app.use(
   cors({
     origin: process.env.FRONTEND_URL || 'http://localhost:3001',
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
@@ -50,6 +50,7 @@ app.use('/api/templates', require('./routes/templates')); // Фаза 3: Templat
 app.use('/api/proposals', require('./routes/proposals')); // Фаза 4: Proposal CRUD
 app.use('/api/pdf', require('./routes/pdf')); // Фаза 5: PDF Generation
 app.use('/api/users', require('./routes/users')); // Управление пользователями (admin-only)
+app.use('/api/price-catalog', require('./routes/priceCatalog')); // Phase 10: каталог цен
 
 // ============= ERROR HANDLING =============
 
@@ -102,6 +103,11 @@ const startServer = async () => {
       console.log(`   GET    /api/pdf/:proposalId    - Скачать PDF (auth)`);
       console.log(`   POST   /api/pdf/export/:proposalId - Экспортировать PDF (auth)`);
       console.log(`   GET    /api/pdf/status/:proposalId - Статус PDF (auth)`);
+      console.log(`   POST   /api/price-catalog/ingest - Приём данных от n8n (API-ключ)`);
+      console.log(`   GET    /api/price-catalog      - Очередь проверки (auth)`);
+      console.log(`   GET    /api/price-catalog/reference - Справочник цен (auth)`);
+      console.log(`   PATCH  /api/price-catalog/:id  - Правка/одобрение записи (auth)`);
+      console.log(`   POST   /api/price-catalog/rename-canonical - Bulk-переименование (admin)`);
       console.log(`   GET    /health                 - Проверка здоровья\n`);
     });
   } catch (error) {

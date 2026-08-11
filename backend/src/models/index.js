@@ -8,6 +8,8 @@ const User = require('./User')(sequelize);
 const Template = require('./Template')(sequelize);
 const Proposal = require('./Proposal')(sequelize);
 const ProposalVersion = require('./ProposalVersion')(sequelize);
+const PriceCatalog = require('./PriceCatalog')(sequelize);
+const PriceCatalogAudit = require('./PriceCatalogAudit')(sequelize);
 
 // ============= СВЯЗИ МЕЖДУ МОДЕЛЯМИ =============
 
@@ -68,6 +70,35 @@ Proposal.belongsTo(ProposalVersion, {
   targetKey: 'id',
 });
 
+// User → PriceCatalog (кто проверил запись)
+User.hasMany(PriceCatalog, {
+  foreignKey: 'reviewed_by',
+  as: 'reviewedPriceCatalogEntries',
+});
+PriceCatalog.belongsTo(User, {
+  foreignKey: 'reviewed_by',
+  as: 'reviewer',
+});
+
+// PriceCatalog → PriceCatalogAudit (один ко многим)
+PriceCatalog.hasMany(PriceCatalogAudit, {
+  foreignKey: 'price_catalog_id',
+  as: 'auditLog',
+});
+PriceCatalogAudit.belongsTo(PriceCatalog, {
+  foreignKey: 'price_catalog_id',
+  as: 'priceCatalogEntry',
+});
+
+User.hasMany(PriceCatalogAudit, {
+  foreignKey: 'changed_by',
+  as: 'priceCatalogEdits',
+});
+PriceCatalogAudit.belongsTo(User, {
+  foreignKey: 'changed_by',
+  as: 'changedByUser',
+});
+
 // ============= ЭКСПОРТ =============
 
 module.exports = {
@@ -76,4 +107,6 @@ module.exports = {
   Template,
   Proposal,
   ProposalVersion,
+  PriceCatalog,
+  PriceCatalogAudit,
 };

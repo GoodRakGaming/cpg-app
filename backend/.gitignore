@@ -28,3 +28,6 @@ build/
 # Logs
 logs/
 *.log
+
+# Dev-only local scripts — никогда не должны попасть в git/прод
+scripts/dev-*.js

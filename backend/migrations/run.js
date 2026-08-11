@@ -13,8 +13,11 @@ const { Client } = require('pg');
 const MIGRATIONS_DIR = __dirname;
 
 async function run() {
+  // Те же поля, что и config/database.js (Sequelize) — сознательно не передаём connectionString
+  // сюда: `pg.Client` при наличии connectionString игнорирует остальные поля целиком, из-за чего
+  // расхождение между DATABASE_URL и DATABASE_NAME/HOST в .env (легко возникает, если один
+  // обновили, а другой забыли) тихо подключает миграции не к той базе.
   const client = new Client({
-    connectionString: process.env.DATABASE_URL,
     host: process.env.DATABASE_HOST || 'localhost',
     port: process.env.DATABASE_PORT || 5432,
     database: process.env.DATABASE_NAME || 'proposals',

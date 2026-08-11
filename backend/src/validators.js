@@ -304,6 +304,107 @@ const updateProposalSchema = Joi.object({
     }),
 }).unknown(false);
 
+/**
+ * Phase 10 — каталог цен. См. docs/PLANNING/PHASE_10_PRICE_CATALOG_PLAN.md, раздел «Схема БД»/«API».
+ */
+
+const PRICE_QUALIFIERS = ['exact', 'from', 'approx', 'on_request'];
+const SOURCE_TYPES = ['own', 'competitor', 'supplier', 'market_scan'];
+const CONFIDENCE_LEVELS = ['low', 'medium', 'high'];
+
+/**
+ * Schema для приёма данных от n8n (POST /api/price-catalog/ingest)
+ * price/price_qualifier — точное взаимоисключение по CHECK в БД (price IS NULL) <=> ('on_request'),
+ * та же логика продублирована здесь на входе, чтобы не долетать до ошибки БД зря.
+ */
+const ingestPriceCatalogSchema = Joi.object({
+  source_work_name: Joi.string().max(500).required().messages({
+    'string.max': 'Название работы не должно превышать 500 символов',
+    'any.required': 'Название работы обязательно',
+  }),
+
+  category: Joi.string().max(255).optional().allow(null),
+
+  unit: Joi.string().max(50).required().messages({
+    'any.required': 'Единица измерения обязательна',
+  }),
+
+  price: Joi.number().positive().allow(null).optional(),
+
+  price_qualifier: Joi.string().valid(...PRICE_QUALIFIERS).optional().default('exact').messages({
+    'any.only': `price_qualifier должен быть одним из: ${PRICE_QUALIFIERS.join(', ')}`,
+  }),
+
+  currency: Joi.string().length(3).uppercase().optional().default('RUB'),
+
+  source_type: Joi.string().valid(...SOURCE_TYPES).required().messages({
+    'any.only': `source_type должен быть одним из: ${SOURCE_TYPES.join(', ')}`,
+    'any.required': 'source_type обязателен',
+  }),
+
+  source_detail: Joi.string().max(2000).optional().allow(null, ''),
+
+  observed_date: Joi.date().iso().optional(),
+
+  confidence: Joi.string().valid(...CONFIDENCE_LEVELS).optional().allow(null),
+
+  model: Joi.string().max(100).optional().allow(null, ''),
+
+  prompt_version: Joi.string().max(50).optional().allow(null, ''),
+
+  raw_extraction: Joi.object().optional().allow(null),
+})
+  .unknown(false)
+  .custom((value, helpers) => {
+    const isOnRequest = value.price_qualifier === 'on_request';
+    if (isOnRequest && value.price != null) {
+      return helpers.message('При price_qualifier = on_request поле price должно быть пустым');
+    }
+    if (!isOnRequest && value.price == null) {
+      return helpers.message('price обязателен, если price_qualifier не on_request');
+    }
+    return value;
+  });
+
+/**
+ * Schema для PATCH /api/price-catalog/:id — одобрение/отклонение/точечная правка перед одобрением
+ */
+const updatePriceCatalogSchema = Joi.object({
+  status: Joi.string().valid('pending_review', 'approved', 'rejected').optional(),
+  source_work_name: Joi.string().max(500).optional(),
+  canonical_work_name: Joi.string().max(500).optional(),
+  category: Joi.string().max(255).optional().allow(null),
+  unit: Joi.string().max(50).optional(),
+  price: Joi.number().positive().allow(null).optional(),
+  price_qualifier: Joi.string().valid(...PRICE_QUALIFIERS).optional(),
+  currency: Joi.string().length(3).uppercase().optional(),
+  source_type: Joi.string().valid(...SOURCE_TYPES).optional(),
+  source_detail: Joi.string().max(2000).optional().allow(null, ''),
+})
+  .min(1)
+  .unknown(false)
+  .messages({
+    'object.min': 'Нужно передать хотя бы одно поле для обновления',
+  });
+
+/**
+ * Schema для POST /api/price-catalog/rename-canonical — bulk-переименование в рамках одной unit
+ */
+const renameCanonicalSchema = Joi.object({
+  from_canonical_work_name: Joi.string().max(500).required(),
+  unit: Joi.string().max(50).required(),
+  to_canonical_work_name: Joi.string().max(500).required(),
+}).unknown(false);
+
+/**
+ * Schema для POST /api/price-catalog/send-to-review — вернуть одобренную группу на пересмотр
+ * (страница «Справочник», admin-only — см. «Второй раунд правок»)
+ */
+const sendGroupToReviewSchema = Joi.object({
+  canonical_work_name: Joi.string().max(500).required(),
+  unit: Joi.string().max(50).required(),
+}).unknown(false);
+
 module.exports = {
   registerSchema,
   loginSchema,
@@ -316,4 +417,8 @@ module.exports = {
   changePasswordSchema,
   updateUserSchema,
   resetPasswordSchema,
+  ingestPriceCatalogSchema,
+  updatePriceCatalogSchema,
+  renameCanonicalSchema,
+  sendGroupToReviewSchema,
 };

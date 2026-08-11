@@ -140,6 +140,53 @@ export interface ProposalVersion {
   created_at: string;
 }
 
+// Phase 10 — каталог цен. См. docs/PLANNING/PHASE_10_PRICE_CATALOG_PLAN.md
+export type PriceQualifier = 'exact' | 'from' | 'approx' | 'on_request';
+export type SourceType = 'own' | 'competitor' | 'supplier' | 'market_scan';
+export type PriceCatalogStatus = 'pending_review' | 'approved' | 'rejected';
+
+export interface PriceCatalogEntry {
+  id: string;
+  source_work_name: string;
+  canonical_work_name: string;
+  category: string | null;
+  unit: string;
+  price: number | null;
+  price_qualifier: PriceQualifier;
+  currency: string;
+  source_type: SourceType;
+  source_detail: string | null;
+  observed_date: string;
+  status: PriceCatalogStatus;
+  confidence: 'low' | 'medium' | 'high' | null;
+  category_review_flag: boolean;
+  category_review_details: {
+    category?: { value: string; similarity: number };
+    canonical_work_name?: { value: string; similarity: number };
+    price_conflict?: { existing_min: number; existing_max: number; source_price: number; delta_percent: number };
+  } | null;
+  model: string | null;
+  prompt_version: string | null;
+  raw_extraction: Record<string, any> | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PriceCatalogReferenceGroup {
+  canonical_work_name: string;
+  unit: string;
+  category: string | null;
+  min_price: number | null;
+  max_price: number | null;
+  median_price: number | null;
+  source_count: number;
+  from_approx_count: number;
+  from_approx_min_price: number | null;
+  on_request_count: number;
+}
+
 class ApiClient {
   private token: string | null = null;
 
@@ -404,6 +451,78 @@ class ApiClient {
 
   async getPDFStatus(proposalId: string): Promise<ApiResponse<{ proposal_id: string; pdf_hash: string | null; is_cached: boolean; status: string }>> {
     return this.request(`/pdf/status/${proposalId}`, { method: 'GET' });
+  }
+
+  // Price Catalog endpoints (Phase 10)
+  async getPriceCatalog(opts: {
+    limit?: number;
+    offset?: number;
+    search?: string;
+    status?: PriceCatalogStatus | 'all';
+    category_review_flag?: boolean;
+  } = {}): Promise<ApiResponse<{ price_catalog: PriceCatalogEntry[]; pagination: { total: number } }>> {
+    const { limit = 20, offset = 0, search, status, category_review_flag } = opts;
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (search) params.set('search', search);
+    if (status) params.set('status', status);
+    if (category_review_flag) params.set('category_review_flag', 'true');
+    return this.request(`/price-catalog?${params.toString()}`, { method: 'GET' });
+  }
+
+  async updatePriceCatalogEntry(
+    id: string,
+    payload: Partial<
+      Pick<
+        PriceCatalogEntry,
+        | 'status'
+        | 'source_work_name'
+        | 'canonical_work_name'
+        | 'category'
+        | 'unit'
+        | 'price'
+        | 'price_qualifier'
+        | 'currency'
+        | 'source_type'
+        | 'source_detail'
+      >
+    >
+  ): Promise<ApiResponse<{ price_catalog: PriceCatalogEntry }>> {
+    return this.request(`/price-catalog/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async renameCanonicalWorkName(payload: {
+    from_canonical_work_name: string;
+    unit: string;
+    to_canonical_work_name: string;
+  }): Promise<ApiResponse<{ renamed_count: number }>> {
+    return this.request('/price-catalog/rename-canonical', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getPriceCatalogReference(opts: { limit?: number; offset?: number; search?: string } = {}): Promise<
+    ApiResponse<{ groups: PriceCatalogReferenceGroup[]; pagination: { total: number } }>
+  > {
+    const { limit = 20, offset = 0, search } = opts;
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (search) params.set('search', search);
+    return this.request(`/price-catalog/reference?${params.toString()}`, { method: 'GET' });
+  }
+
+  async getPriceCatalogSources(canonicalWorkName: string, unit: string): Promise<ApiResponse<{ sources: PriceCatalogEntry[] }>> {
+    const params = new URLSearchParams({ canonical_work_name: canonicalWorkName, unit });
+    return this.request(`/price-catalog/reference/sources?${params.toString()}`, { method: 'GET' });
+  }
+
+  async sendGroupToReview(canonicalWorkName: string, unit: string): Promise<ApiResponse<{ sent_to_review_count: number }>> {
+    return this.request('/price-catalog/send-to-review', {
+      method: 'POST',
+      body: JSON.stringify({ canonical_work_name: canonicalWorkName, unit }),
+    });
   }
 }
 
