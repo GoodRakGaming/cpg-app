@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient, PriceCatalogEntry, PriceCatalogStatus } from '@/lib/api';
 import { authManager } from '@/lib/auth';
+import { usePolling } from '@/lib/usePolling';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -342,6 +343,10 @@ export default function PriceCatalogPage() {
       setLoading(false);
     }
   };
+
+  // Очередь общая на всех проверяющих — новые записи из ingest должны появляться сами. Пауза,
+  // пока открыта форма правки (editingId), чтобы не сбить её обновлением списка под рукой.
+  usePolling(fetchEntries, 15000, editingId === null);
 
   const handleSearchChange = (value: string) => {
     setSearch(value);

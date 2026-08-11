@@ -17,7 +17,7 @@ const sequelize = require('../config/database');
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://192.168.1.106:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || '';
-const OLLAMA_TIMEOUT_MS = parseInt(process.env.OLLAMA_TIMEOUT_MS || '20000', 10);
+const OLLAMA_TIMEOUT_MS = parseInt(process.env.OLLAMA_TIMEOUT_MS || '180000', 10);
 // v2 — по итогам тестирования на реальных данных (2026-08-07, 5 раундов, devstral:24b/phi4:14b
 // прошли 0/31 ошибок, 0/8 на критичных over-merge кейсах): reasoning-поле первым в схеме +
 // ценовой guard rail при канонизации. См. docs/PLANNING/PHASE_10_PRICE_CATALOG_PLAN.md.

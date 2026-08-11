@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiClient, Proposal } from '@/lib/api';
 import { authManager } from '@/lib/auth';
+import { usePolling } from '@/lib/usePolling';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -81,6 +82,9 @@ export default function ProposalsPage() {
       setLoading(false);
     }
   };
+
+  // Список общий на всех сотрудников — новые/чужие КП должны появляться без ручной перезагрузки.
+  usePolling(fetchProposals, 15000);
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
