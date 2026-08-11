@@ -38,6 +38,21 @@ async function initBrowser() {
   return browser;
 }
 
+const A4_HEIGHT_MM = 297;
+const MM_TO_PX = 96 / 25.4; // Chromium/Puppeteer печатает при 96dpi
+
+// Измеряет реальную высоту отрисованного `.page` (в мм) — точный ответ «влезет/не влезет
+// в один лист», без догадок по числу позиций (см. generateProposalPdf — там же обоснование,
+// почему число позиций само по себе оказалось ненадёжным сигналом: реальная высота зависит
+// ещё и от «Условий», длины реквизитов компании, длины названий позиций).
+async function measurePageHeightMm(page) {
+  const heightPx = await page.evaluate(() => {
+    const el = document.querySelector('.page');
+    return el ? el.getBoundingClientRect().height : 0;
+  });
+  return heightPx / MM_TO_PX;
+}
+
 /**
  * Generate PDF from HTML string
  * @param {string} htmlContent - HTML content to convert
@@ -49,15 +64,13 @@ async function generatePdfFromHtml(htmlContent, options = {}) {
     const browserInstance = await initBrowser();
     const page = await browserInstance.newPage();
 
-    // Set default options
+    // Поля страницы задаются один раз — CSS-отступом `.page` в самом HTML (см.
+    // generateProposalHtml), не здесь. Раньше Puppeteer накладывал свои 10mm margin поверх
+    // отступа `.page`, из-за чего реальные поля документа (30мм+ сверху/снизу) не совпадали с
+    // тем, что задано в CSS — задвоение полей. Margin здесь всегда нулевой намеренно.
     const pdfOptions = {
       format: options.format || 'A4',
-      margin: options.margin || {
-        top: '10mm',
-        right: '10mm',
-        bottom: '10mm',
-        left: '10mm',
-      },
+      margin: options.margin || { top: 0, right: 0, bottom: 0, left: 0 },
       printBackground: options.printBackground !== false,
       ...options,
     };
@@ -237,10 +250,13 @@ function renderRecipient(recipient) {
 }
 
 function renderItemsTable(items) {
-  if (!Array.isArray(items) || items.length === 0) return { html: '', grandTotal: 0 };
+  if (!Array.isArray(items) || items.length === 0) return { html: '', grandTotal: 0, rowCount: 0 };
 
   const hasSections = items.some((item) => item.section);
   let grandTotal = 0;
+  // Число реально отрисовываемых строк таблицы (позиции + заголовки разделов + строки
+  // подытогов) — используется для выбора обычной/сжатой вёрстки, см. generateProposalHtml.
+  let renderedRowCount = 0;
 
   // Каждый раздел — отдельный <tbody class="section-group"> (заголовок раздела + позиции +
   // подытог): на группе стоит break-inside: avoid, чтобы при переносе страницы раздел уходил
@@ -263,6 +279,7 @@ function renderItemsTable(items) {
             <td colspan="5">Подытог по разделу</td>
             <td class="col-money">${money(sectionTotal)}</td>
           </tr>`;
+      renderedRowCount += 1;
     }
     if (rows) {
       // Без разделов вся таблица — одна группа: ей запрет разрыва тоже не ставим.
@@ -276,7 +293,7 @@ function renderItemsTable(items) {
     sectionRowCount = 0;
   };
 
-  for (const item of items) {
+  items.forEach((item, itemIndex) => {
     const quantity = Number(item.quantity) || 1;
     const price = Number(item.price) || 0;
     const lineTotal = quantity * price;
@@ -290,14 +307,21 @@ function renderItemsTable(items) {
           <tr class="section-row">
             <td colspan="6">${esc(currentSection)}</td>
           </tr>`;
+      renderedRowCount += 1;
       index = 0;
       sectionTotal = lineTotal;
     }
     index += 1;
     sectionRowCount += 1;
+    renderedRowCount += 1;
+
+    // Последняя строка таблицы целиком помечается — вместе с break-before на .total-box и
+    // .signature-block (см. CSS) не даёт печати/подписи оторваться в одиночестве на новую
+    // страницу: если перенос неизбежен, он утягивает с собой хотя бы последнюю позицию и итог.
+    const isLastRow = itemIndex === items.length - 1;
 
     rows += `
-          <tr>
+          <tr${isLastRow ? ' class="last-row"' : ''}>
             <td class="col-num">${index}</td>
             <td>${esc(item.name)}</td>
             <td class="col-unit">${esc(item.unit || '')}</td>
@@ -305,7 +329,7 @@ function renderItemsTable(items) {
             <td class="col-money">${money(price)}</td>
             <td class="col-money">${money(lineTotal)}</td>
           </tr>`;
-  }
+  });
   closeSection();
 
   const html = `
@@ -322,7 +346,7 @@ function renderItemsTable(items) {
     </thead>${bodies}
   </table>`;
 
-  return { html, grandTotal };
+  return { html, grandTotal, rowCount: renderedRowCount };
 }
 
 function renderTotalBox(grandTotal, vatNote) {
@@ -364,9 +388,13 @@ function renderSignature(signer, company, includeSignature, includeStamp) {
  * Generate HTML for proposal
  * @param {Object} proposal - Proposal data
  * @param {Object} template - Template data
+ * @param {{forceLayout?: 'normal'|'compact'}} [options] - какую вёрстку использовать. По
+ *   умолчанию 'normal' — решение «влезет ли сжатая на одну страницу» принимает
+ *   generateProposalPdf путём реального измерения после рендера (число позиций само по себе
+ *   ненадёжный сигнал — см. её комментарий), не эта функция.
  * @returns {string} - Generated HTML
  */
-function generateProposalHtml(proposal, template) {
+function generateProposalHtml(proposal, template, options = {}) {
   // Parse template data if it's a string
   const templateData = typeof template.data === 'string'
     ? JSON.parse(template.data)
@@ -383,6 +411,12 @@ function generateProposalHtml(proposal, template) {
     : (Array.isArray(templateData.items) ? templateData.items : []);
 
   const itemsTable = renderItemsTable(displayItems);
+
+  const useCompact = options.forceLayout === 'compact';
+
+  // Значения только для «воздуха» между блоками — размер шрифта самого текста не трогаем,
+  // чтобы сжатие не било по читаемости.
+  const v = (normal, compact) => (useCompact ? compact : normal);
 
   const html = `
 <!DOCTYPE html>
@@ -412,12 +446,15 @@ function generateProposalHtml(proposal, template) {
 
     .page {
       width: 210mm;
-      padding: 20mm 18mm;
+      /* Принятые в деловом документообороте поля под подшивку: лево 30мм, право 15мм,
+         верх/низ 20мм (top right bottom left). Единственный источник полей документа —
+         см. комментарий у margin в generatePdfFromHtml. */
+      padding: 20mm 15mm 20mm 30mm;
     }
 
     /* ── header ── */
     .doc-header {
-      padding-bottom: 4mm;
+      padding-bottom: ${v('4mm', '3mm')};
       border-bottom: 1px solid var(--line);
     }
     .doc-header-row {
@@ -442,13 +479,13 @@ function generateProposalHtml(proposal, template) {
 
     /* ── recipient / title ── */
     .recipient-block {
-      margin-top: 8mm;
+      margin-top: ${v('8mm', '5mm')};
       font-size: 9.5pt;
       color: var(--text);
       text-align: right;
     }
     .doc-title {
-      margin-top: 8mm;
+      margin-top: ${v('8mm', '5mm')};
       font-size: 15pt;
       font-weight: 700;
       color: var(--ink);
@@ -460,7 +497,7 @@ function generateProposalHtml(proposal, template) {
     .items-table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 8mm;
+      margin-top: ${v('8mm', '5mm')};
       font-size: 9.5pt;
     }
     .items-table th {
@@ -470,11 +507,11 @@ function generateProposalHtml(proposal, template) {
       font-size: 8pt;
       text-transform: uppercase;
       letter-spacing: 0.02em;
-      padding: 2.5mm 3mm;
+      padding: ${v('2.5mm 3mm', '2mm 3mm')};
       border-bottom: 1px solid var(--ink);
     }
     .items-table td {
-      padding: 2.5mm 3mm;
+      padding: ${v('2.5mm 3mm', '2mm 3mm')};
       border-bottom: 1px solid var(--line);
       vertical-align: top;
     }
@@ -483,8 +520,11 @@ function generateProposalHtml(proposal, template) {
     .items-table .col-money { width: 30mm; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .items-table tr { break-inside: avoid; }
     .items-table tbody.section-group { break-inside: avoid; }
+    /* Не начинать новую страницу сразу после последней позиции — тянет её вместе с итогом/
+       подписью, если перенос неизбежен (см. заявку про «печать/подпись в одиночестве»). */
+    .items-table tr.last-row { break-after: avoid; }
     .items-table .section-row td {
-      padding-top: 5mm;
+      padding-top: ${v('5mm', '3mm')};
       font-weight: 700;
       color: var(--accent);
       border-bottom: none;
@@ -494,26 +534,28 @@ function generateProposalHtml(proposal, template) {
       font-style: italic;
       color: var(--muted);
       padding-top: 1.5mm;
-      padding-bottom: 4mm;
+      padding-bottom: ${v('4mm', '2.5mm')};
     }
     .total-box {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-top: 5mm;
-      padding: 3.5mm 4mm;
+      margin-top: ${v('5mm', '3mm')};
+      padding: ${v('3.5mm 4mm', '2.5mm 4mm')};
       background: var(--accent-soft);
       border-radius: 2mm;
       font-weight: 700;
       color: var(--ink);
       font-size: 10.5pt;
+      break-inside: avoid;
+      break-before: avoid;
     }
     .total-box .col-money { font-variant-numeric: tabular-nums; }
 
     /* ── terms ── */
     .terms-list { margin: 0; padding-left: 4mm; }
     .terms-list li { margin-top: 1.5mm; color: var(--text); }
-    .section { margin-top: 8mm; }
+    .section { margin-top: ${v('8mm', '5mm')}; }
     .section-title {
       font-size: 9.5pt;
       font-weight: 700;
@@ -522,12 +564,22 @@ function generateProposalHtml(proposal, template) {
     }
 
     /* ── signature ── */
+    /* Известное ограничение orphan-guard (проверено эмпирически, 2026-08-11): break-before
+       здесь избавляет от ГОЛОЙ подписи на отдельной странице (гарантированно рядом будет хотя бы
+       хвост предыдущего блока), но гарантия «обязательно позиция+итог+подпись вместе» держится,
+       только пока раздел «Условия» между total-box и signature-block короткий/отсутствует — при
+       длинных «Условиях» (проверено на 15 пунктах) их конец окажется на одной странице с
+       подписью, а не последняя позиция и итог, так как «Условия» намеренно разрываются свободно
+       (не хотим склеивать длинный список условий целиком с подписью). Если понадобится жёстче —
+       нужно отдельно решать, что делать с длинными «Условиями» рядом с этим блоком. */
     .signature-block {
       display: flex;
       align-items: flex-end;
       justify-content: space-between;
       gap: 10mm;
-      margin-top: 14mm;
+      margin-top: ${v('14mm', '8mm')};
+      break-inside: avoid;
+      break-before: avoid;
     }
     .signature-main { flex: 1; max-width: 100mm; }
     .signature-label { font-size: 9.5pt; color: var(--text); margin-bottom: 2mm; }
@@ -584,6 +636,68 @@ function generateProposalHtml(proposal, template) {
 }
 
 /**
+ * Генерирует готовый PDF предложения, сам выбирая обычную или сжатую вёрстку.
+ *
+ * Раньше выбор пытались делать по числу позиций (порог, откалиброванный на одном примере) —
+ * оказалось ненадёжно: реальная высота документа зависит ещё и от того, есть ли раздел
+ * «Условия», сколько реквизитов в шапке компании, насколько длинные названия позиций — то же
+ * число позиций на разных шаблонах даёт разную высоту. Поэтому решение принимается по факту:
+ * рендерим обычную вёрстку, измеряем реальную высоту `.page` в браузере, и только если она не
+ * влезает в лист A4 — пробуем сжатую. Если не влезает и она — остаёмся на обычной, многостраничный
+ * документ неизбежен, а «сиротскую» подпись на второй странице не даёт CSS orphan-guard (см.
+ * .last-row/.total-box/.signature-block в generateProposalHtml).
+ *
+ * @param {Object} proposal - Proposal data
+ * @param {Object} template - Template data
+ * @param {Object} [pdfOptions] - те же опции, что и generatePdfFromHtml (format/margin/printBackground)
+ * @returns {Promise<Buffer>}
+ */
+// Открывает свежую страницу под один HTML, выполняет на ней действие, закрывает страницу.
+// Намеренно не переиспользует одну страницу под несколько setContent() подряд — на практике
+// повторный setContent() на уже использованной странице иногда подвешивает networkidle0
+// (воспроизводилось и здесь, и в замерах при калибровке) — отдельная страница на попытку дороже,
+// но надёжно.
+async function withRenderedPage(browserInstance, html, action) {
+  const page = await browserInstance.newPage();
+  try {
+    await page.setViewport({
+      width: Math.round(210 * MM_TO_PX),
+      height: Math.round(A4_HEIGHT_MM * MM_TO_PX),
+    });
+    await page.emulateMediaType('print');
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    return await action(page);
+  } finally {
+    await page.close();
+  }
+}
+
+async function generateProposalPdf(proposal, template, pdfOptions = {}) {
+  const browserInstance = await initBrowser();
+
+  const htmlNormal = generateProposalHtml(proposal, template, { forceLayout: 'normal' });
+  let finalHtml = htmlNormal;
+
+  const normalHeightMm = await withRenderedPage(browserInstance, htmlNormal, measurePageHeightMm);
+  if (normalHeightMm > A4_HEIGHT_MM) {
+    const htmlCompact = generateProposalHtml(proposal, template, { forceLayout: 'compact' });
+    const compactHeightMm = await withRenderedPage(browserInstance, htmlCompact, measurePageHeightMm);
+    if (compactHeightMm <= A4_HEIGHT_MM) {
+      finalHtml = htmlCompact;
+    }
+    // Иначе ни один вариант не влезает — остаёмся на htmlNormal (уже так, ничего не меняем),
+    // многостраничный документ неизбежен, дальше работает CSS orphan-guard.
+  }
+
+  const finalOptions = {
+    format: pdfOptions.format || 'A4',
+    margin: pdfOptions.margin || { top: 0, right: 0, bottom: 0, left: 0 },
+    printBackground: pdfOptions.printBackground !== false,
+  };
+  return withRenderedPage(browserInstance, finalHtml, (page) => page.pdf(finalOptions).then(Buffer.from));
+}
+
+/**
  * Gracefully close browser instance
  */
 async function closeBrowser() {
@@ -604,5 +718,6 @@ module.exports = {
   generateAndSavePdf,
   calculatePdfHash,
   generateProposalHtml,
+  generateProposalPdf,
   closeBrowser,
 };

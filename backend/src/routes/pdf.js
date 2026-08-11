@@ -79,8 +79,7 @@ router.post('/generate/:proposalId', authenticateToken, async (req, res) => {
     const { error, message, proposal } = await findProposal(req.params.proposalId, true);
     if (error) return res.status(error).json({ success: false, error: message });
 
-    const html = pdfService.generateProposalHtml(proposal, proposal.template);
-    const pdfBuffer = await pdfService.generatePdfFromHtml(html);
+    const pdfBuffer = await pdfService.generateProposalPdf(proposal, proposal.template);
     const pdfHash = pdfService.calculatePdfHash(pdfBuffer);
 
     if (proposal.pdf_hash !== pdfHash) {
@@ -107,12 +106,13 @@ router.post('/export/:proposalId', authenticateToken, async (req, res) => {
     const { format, margin, printBackground } = req.body;
     const pdfOptions = {
       format: format || 'A4',
-      margin: margin || { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
+      // Поля страницы задаются CSS-отступом `.page` в самом HTML — см. комментарий в
+      // pdfService.generatePdfFromHtml. Ноль по умолчанию, а не отдельное значение здесь.
+      margin: margin || { top: 0, right: 0, bottom: 0, left: 0 },
       printBackground: printBackground !== false,
     };
 
-    const html = pdfService.generateProposalHtml(proposal, proposal.template);
-    const pdfBuffer = await pdfService.generatePdfFromHtml(html, pdfOptions);
+    const pdfBuffer = await pdfService.generateProposalPdf(proposal, proposal.template, pdfOptions);
     const pdfHash = pdfService.calculatePdfHash(pdfBuffer);
     await proposal.update({ pdf_hash: pdfHash });
 
@@ -134,8 +134,7 @@ router.get('/:proposalId', authenticateToken, async (req, res) => {
     const { error, message, proposal } = await findProposal(req.params.proposalId, true);
     if (error) return res.status(error).json({ success: false, error: message });
 
-    const html = pdfService.generateProposalHtml(proposal, proposal.template);
-    const pdfBuffer = await pdfService.generatePdfFromHtml(html);
+    const pdfBuffer = await pdfService.generateProposalPdf(proposal, proposal.template);
 
     console.log(`📄 PDF generated for "${proposal.title}": ${pdfBuffer.length} bytes, starts with: ${pdfBuffer.slice(0, 5).toString('ascii')}`);
 
