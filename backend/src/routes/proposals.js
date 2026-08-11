@@ -11,6 +11,7 @@ const { Op } = require('sequelize');
 const { authenticateToken } = require('../middleware/auth');
 const { proposalSchema, updateProposalSchema } = require('../validators');
 const { Proposal, ProposalVersion, Template, User } = require('../models');
+const { allocateProposalNumber } = require('../services/proposalNumberService');
 
 const router = express.Router();
 
@@ -100,7 +101,17 @@ router.post('/', authenticateToken, async (req, res, next) => {
 
     // Копируем позиции из шаблона как начальные данные предложения
     const initialItems = Array.isArray(template.data?.items) ? template.data.items : [];
-    const initialData = { items: initialItems, description: '', ...(value.data || {}) };
+    // Номер и дата — предзаполняются, но остаются обычным редактируемым полем внутри data
+    // (не новая сущность): номер выделяется атомарным счётчиком по году, только если его не
+    // прислали явно — не тратим счётчик, если фронт когда-нибудь начнёт передавать своё значение.
+    const today = new Date();
+    const initialData = {
+      items: initialItems,
+      description: '',
+      number: value.data?.number || (await allocateProposalNumber(today)),
+      date: value.data?.date || today.toISOString().slice(0, 10),
+      ...(value.data || {}),
+    };
 
     // Создаём предложение
     const proposalId = uuidv4();
