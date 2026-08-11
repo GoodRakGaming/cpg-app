@@ -315,6 +315,7 @@ async function categorize(entry) {
       used_fallback: false,
     };
   } catch (err) {
+    console.error('[librarianService] categorize() упал, используется fallback:', err.message);
     return fallback;
   }
 }
