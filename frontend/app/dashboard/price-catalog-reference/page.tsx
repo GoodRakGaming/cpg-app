@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient, PriceCatalogEntry, PriceCatalogReferenceGroup } from '@/lib/api';
 import { authManager } from '@/lib/auth';
+import { usePolling } from '@/lib/usePolling';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -274,6 +275,10 @@ export default function PriceCatalogReferencePage() {
       setLoading(false);
     }
   };
+
+  // Справочник общий на всех сотрудников — пауза, пока открыта форма переименования (не трогаем
+  // «Показать источники» — это просто просмотр, не форма ввода).
+  usePolling(fetchGroups, 15000, renamingKey === null);
 
   const handleSearchChange = (value: string) => {
     setSearch(value);

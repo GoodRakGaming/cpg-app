@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiClient, Template } from '@/lib/api';
 import { authManager } from '@/lib/auth';
+import { usePolling } from '@/lib/usePolling';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -52,6 +53,10 @@ export default function TemplatesPage() {
       setLoading(false);
     }
   };
+
+  // Список общий на всех сотрудников — редактирование самого шаблона происходит на отдельной
+  // странице (не здесь), поэтому паузу на «в процессе редактирования» тут делать не от чего.
+  usePolling(fetchTemplates, 15000);
 
   const handleSearchChange = (value: string) => {
     setSearch(value);

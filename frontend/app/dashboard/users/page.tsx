@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient, User } from '@/lib/api';
 import { authManager } from '@/lib/auth';
+import { usePolling } from '@/lib/usePolling';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
@@ -187,6 +188,10 @@ export default function UsersPage() {
       setLoading(false);
     }
   };
+
+  // Список общий на всех админов — пауза, пока открыта форма создания пользователя, чтобы не
+  // сбросить набранные поля под рукой.
+  usePolling(fetchUsers, 15000, !showNewUserForm);
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
