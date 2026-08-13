@@ -1,0 +1,197 @@
+{
+  "name": "Phase10 - Level0 - Прайс из Nextcloud в price_catalog",
+  "nodes": [
+    {
+      "parameters": {
+        "event": "fileCreated",
+        "path": "/На анализ",
+        "options": {}
+      },
+      "id": "nextcloud-trigger",
+      "name": "Nextcloud Trigger (новый файл)",
+      "type": "n8n-nodes-base.nextCloudTrigger",
+      "typeVersion": 1,
+      "position": [0, 300],
+      "notes": "ВАЖНО: путь /На анализ — замени на реальный путь к папке, которую ты создашь. Триггер реагирует только на файлы, появившиеся ПОСЛЕ активации workflow — уже загруженный файл не сработает, для первого теста используй Execute Node на следующих узлах вручную (см. стики ниже)."
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "download",
+        "path": "={{ $json.path }}"
+      },
+      "id": "nextcloud-download",
+      "name": "Скачать файл",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [220, 300],
+      "notes": "Credential Nextcloud нужно выбрать/создать в n8n UI после импорта (Settings -> Credentials), если ещё не настроен."
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {}
+      },
+      "id": "extract-xlsx",
+      "name": "Разобрать xlsx (1 item = 1 строка)",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [440, 300],
+      "notes": "На выходе — по одному item на строку таблицы, поля = реальные заголовки колонок твоего xlsx. Запусти этот узел один раз через Execute Node, посмотри реальные имена полей и подставь их в следующий узел вместо плейсхолдеров."
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "name": "row_text",
+              "type": "string",
+              "value": "=ЗАМЕНИ ЭТО ВЫРАЖЕНИЕ: собери текст строки из реальных полей, например `Наименование: ${$json['Наименование работы']}. Ед. изм.: ${$json['Ед.изм']}. Цена: ${$json['Цена']} руб.` — используй реальные названия колонок, увиденные в предыдущем узле"
+            },
+            {
+              "name": "source_type",
+              "type": "string",
+              "value": "supplier"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "build-row-text",
+      "name": "!! ЗАПОЛНИ: собрать текст строки",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [660, 300],
+      "notes": "ГЛАВНЫЙ узел, который нужно доработать руками — я не знаю реальные заголовки колонок твоего xlsx. source_type='supplier' — проверь, это предположение (файл называется 'надо обновлять стоимость', похоже на прайс поставщика, не свой прайс) — поменяй на 'own', если это не так."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.1.106:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"devstral:24b\",\n  \"prompt\": \"Извлеки из текста позиции прайс-листа структурированные данные для внесения в справочник цен строительных работ.\\n\\nТекст позиции: \\\"\" + $json.row_text.replace(/\"/g, '\\\\\"') + \"\\\"\\n\\nВерни JSON: source_work_name — название работы как в тексте (без цены и единицы измерения); unit — единица измерения (например 'кв.м', 'шт.', 'м.п.'); price — число, цена без валюты (или null, если цена не указана/по договору); price_qualifier — одно из: exact (точная цена), from (цена от), approx (примерная), on_request (по договору, число не указано); confidence — насколько уверенно распознаны цифры и единица измерения в этом фрагменте (low/medium/high).\",\n  \"format\": {\n    \"type\": \"object\",\n    \"properties\": {\n      \"source_work_name\": {\"type\": \"string\"},\n      \"unit\": {\"type\": \"string\"},\n      \"price\": {\"type\": [\"number\", \"null\"]},\n      \"price_qualifier\": {\"type\": \"string\", \"enum\": [\"exact\", \"from\", \"approx\", \"on_request\"]},\n      \"confidence\": {\"type\": \"string\", \"enum\": [\"low\", \"medium\", \"high\"]}\n    },\n    \"required\": [\"source_work_name\", \"unit\", \"price_qualifier\", \"confidence\"]\n  },\n  \"stream\": false\n}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "ollama-extract",
+      "name": "Извлечение полей (Ollama)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 300],
+      "notes": "Отдельный вызов LLM на КАЖДУЮ строку — самая дорогая по времени часть полного пайплайна (см. предупреждение в чате про часы вместо минут). URL — LXC 107, подставлен по docs/PLANNING/PHASE_10_llm_infra_plan.md, проверь актуальность."
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "name": "source_work_name",
+              "type": "string",
+              "value": "={{ JSON.parse($json.response).source_work_name }}"
+            },
+            {
+              "name": "unit",
+              "type": "string",
+              "value": "={{ JSON.parse($json.response).unit }}"
+            },
+            {
+              "name": "price",
+              "type": "number",
+              "value": "={{ JSON.parse($json.response).price }}"
+            },
+            {
+              "name": "price_qualifier",
+              "type": "string",
+              "value": "={{ JSON.parse($json.response).price_qualifier }}"
+            },
+            {
+              "name": "confidence",
+              "type": "string",
+              "value": "={{ JSON.parse($json.response).confidence }}"
+            },
+            {
+              "name": "source_type",
+              "type": "string",
+              "value": "={{ $('!! ЗАПОЛНИ: собрать текст строки').item.json.source_type }}"
+            },
+            {
+              "name": "source_detail",
+              "type": "string",
+              "value": "Прайс Альфа групп (n8n Level 0, xlsx)"
+            },
+            {
+              "name": "raw_extraction",
+              "type": "object",
+              "value": "={{ { snippet: $('!! ЗАПОЛНИ: собрать текст строки').item.json.row_text } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "map-to-ingest",
+      "name": "Собрать payload для ingest",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1100, 300],
+      "notes": "raw_extraction.snippet сохраняет исходный фрагмент текста — на экране проверки ревьюер видит, откуда взялось значение (защита от отравления данных, см. план Phase 10)."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.1.105:3000/api/price-catalog/ingest",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-API-Key", "value": "={{ $credentials.priceCatalogApiKey }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { source_work_name: $json.source_work_name, unit: $json.unit, price: $json.price, price_qualifier: $json.price_qualifier, confidence: $json.confidence, source_type: $json.source_type, source_detail: $json.source_detail, raw_extraction: $json.raw_extraction } }}",
+        "options": {}
+      },
+      "id": "ingest-call",
+      "name": "POST /api/price-catalog/ingest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 300],
+      "notes": "URL — внутренний LAN-адрес cpg-app (быстрее и не требует выхода через публичный домен, обе LXC в одной сети 192.168.1.0/24). X-API-Key через выражение с credentials — создай в n8n Credentials простой 'Header Auth' или подставь значение сам вручную в это поле после импорта (я специально не прошу и не подставляю сам ключ)."
+    },
+    {
+      "parameters": {
+        "content": "## Как пользоваться этим workflow\n\n1. Импортируй файл целиком (n8n UI -> Workflows -> Import from File).\n2. Настрой Nextcloud credential в узле \"Скачать файл\" (если ещё не настроен).\n3. Проверь путь к папке в Nextcloud Trigger — должен совпадать с той, что ты создашь.\n4. **Обязательно**: запусти узел \"Разобрать xlsx\" через Execute Node на реальном файле, посмотри реальные названия колонок, перепиши выражение в узле \"!! ЗАПОЛНИ\".\n5. Проверь/поправь source_type ('supplier' — моё предположение по названию файла).\n6. Впиши X-API-Key в последний узел (POST ingest) — значение ключа НЕ передавай мне, впиши сам прямо в n8n.\n7. Сначала прогони на 2-3 строках вручную (Execute Node по цепочке), проверь результат в /dashboard/price-catalog на проде, и только потом запускай на всём файле.\n8. Ожидай часы на полный прогон (545 строк x 3 вызова LLM) — это НЕ баг, так и должно быть для 'полного пути' с извлечением.",
+        "height": 420,
+        "width": 460
+      },
+      "id": "sticky-instructions",
+      "name": "Инструкция",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [0, -420]
+    }
+  ],
+  "connections": {
+    "Nextcloud Trigger (новый файл)": {
+      "main": [[{ "node": "Скачать файл", "type": "main", "index": 0 }]]
+    },
+    "Скачать файл": {
+      "main": [[{ "node": "Разобрать xlsx (1 item = 1 строка)", "type": "main", "index": 0 }]]
+    },
+    "Разобрать xlsx (1 item = 1 строка)": {
+      "main": [[{ "node": "!! ЗАПОЛНИ: собрать текст строки", "type": "main", "index": 0 }]]
+    },
+    "!! ЗАПОЛНИ: собрать текст строки": {
+      "main": [[{ "node": "Извлечение полей (Ollama)", "type": "main", "index": 0 }]]
+    },
+    "Извлечение полей (Ollama)": {
+      "main": [[{ "node": "Собрать payload для ingest", "type": "main", "index": 0 }]]
+    },
+    "Собрать payload для ingest": {
+      "main": [[{ "node": "POST /api/price-catalog/ingest", "type": "main", "index": 0 }]]
+    }
+  }
+}
