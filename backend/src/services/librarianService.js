@@ -73,6 +73,11 @@ const CATEGORY_DESCRIPTIONS = {
   'Земляные работы': 'работы земляной бригады: копка траншей и котлованов, обратная засыпка, планировка грунта, уплотнение основания, устройство дорожек, корчевание',
 };
 
+// Список опций для модели — канонический справочник CATEGORY_DESCRIPTIONS ВСЕГДА присутствует
+// целиком, плюс любые категории, органически появившиеся в БД сверх него (например, если
+// ревьюер вручную ввёл новую при одобрении). Баг, найденный на реальном прогоне (2026-08-13):
+// раньше список брался только из БД — пока каталог почти пуст, модели было не из чего выбирать,
+// и она изобретала категорию из сырого текста позиции вместо выбора из справочника.
 async function fetchExistingCategories() {
   const rows = await sequelize.query(
     `SELECT DISTINCT category FROM price_catalog
@@ -80,7 +85,9 @@ async function fetchExistingCategories() {
      ORDER BY category LIMIT :limit`,
     { type: QueryTypes.SELECT, replacements: { limit: MAX_CATEGORIES_IN_PROMPT } }
   );
-  return rows.map((r) => r.category);
+  const dbCategories = rows.map((r) => r.category);
+  const merged = new Set([...Object.keys(CATEGORY_DESCRIPTIONS), ...dbCategories]);
+  return Array.from(merged).sort((a, b) => a.localeCompare(b, 'ru'));
 }
 
 // Цены по любому статусу (не только approved) — на этом этапе это ориентир для суждения LLM,
