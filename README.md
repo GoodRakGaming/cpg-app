@@ -1,36 +1,24 @@
 # Commercial Proposal Generator
 
-Документация проекта организована в папке `docs/`.
+Веб-приложение для создания коммерческих предложений (КП) из шаблонов, с версионированием и
+экспортом в PDF. Развёрнуто на **https://cp.profstroi74.ru**.
 
-- Начните с: `docs/README.md`
-- Текущее состояние: `docs/STATUS.md`
-- Полный каталог документов: `docs/_INDEX.md`
+Документация — в `docs/`:
 
----
+- **[docs/README.md](docs/README.md)** — навигация, запуск локально
+- **[docs/STATUS.md](docs/STATUS.md)** — текущее состояние, changelog
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — стек, модель данных, справочник API
+- **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** — инфраструктура, деплой
+- **[docs/PLANNING/](docs/PLANNING/)** — активные и будущие задачи
 
 ## Быстрый старт
 
 ```bash
-cd /home/yura/Projects/commercial_proposal_generator
-# Откройте docs/README.md для навигации
+# Backend (порт 3000) — запускать первым, дать подняться, затем frontend
+cd backend && npm install && npm run dev
+
+# Frontend (порт 3001)
+cd frontend && npm install && npm run dev
 ```
 
-## Упорядочение документации
-
-Все документы проекта теперь структурированы по разделам:
-- `docs/GETTING_STARTED/`
-- `docs/ARCHITECTURE/`
-- `docs/BACKEND/`
-- `docs/FRONTEND/`
-- `docs/TESTING/`
-- `docs/TROUBLESHOOTING/`
-- `docs/ARCHIVES/`
-
----
-
-## Актуальное состояние
-
-- Проект в стадии разработки
-- Backend готов (Phase 1-5)
-- Frontend базовая часть готова (Phase 7)
-- Полная документация перенесена в `docs/`
+Backend требует PostgreSQL и `.env` (см. `backend/.env.example`). Миграции — `npm run migrate` в `backend/`.

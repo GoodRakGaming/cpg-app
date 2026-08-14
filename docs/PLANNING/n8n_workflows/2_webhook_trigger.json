@@ -1,0 +1,172 @@
+{
+  "name": "Phase10B #2 — Триггер: мгновенный (webhook)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "file-import",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook (Nextcloud webhook_listeners)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "notes": "Подписка на стороне Nextcloud — ШИРОКАЯ (только event=NodeRenamedEvent, без eventFilter, тест №0 показал, что regex-фильтр по event.target.path на этой версии webhook_listeners не матчит — не тратить время на его починку повторно). Значит сюда прилетает вообще любое переименование/перемещение файла в Nextcloud — фильтрация по нужной папке сделана ниже, узлом «Это наша папка?». Payload всё равно не доверенный — путь/файл/формат перепроверяются внутри workflow #1, шаг Claim."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.headers['x-shared-secret'] }}",
+              "rightValue": "=ЗАМЕНИ: тот же shared-secret, что в headers регистрации webhook_listeners (./setup_nextcloud_webhook.sh show-secret на сервере Nextcloud)",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-secret",
+      "name": "Проверка shared-secret",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.body.event.class }}",
+              "rightValue": "OCP\\Files\\Events\\Node\\NodeRenamedEvent",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "leftValue": "={{ $json.body.event.target.path }}",
+              "rightValue": "/Price-extractor/queue/",
+              "operator": { "type": "string", "operation": "contains" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-folder",
+      "name": "Это наша папка?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [440, 300],
+      "notes": "Тест №0 (раунд 3, C1) подтвердил: для NodeRenamedEvent target.path отражает НОВОЕ расположение файла — перемещение ИЗ «queue/» даёт target.path без этой папки и сюда не проходит, повторного запуска workflow #1 не будет. Фильтрация вручную здесь — потому что eventFilter на стороне Nextcloud (эта версия webhook_listeners) не матчит кириллицу/наш regex, см. заметку на узле Webhook."
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "name": "filename",
+              "type": "string",
+              "value": "={{ $json.body.event.target.path.split('/').pop() }}"
+            },
+            {
+              "name": "source_folder",
+              "type": "string",
+              "value": "queue/"
+            },
+            {
+              "name": "trigger_type",
+              "type": "string",
+              "value": "webhook"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "build-params",
+      "name": "Собрать параметры",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [660, 200],
+      "notes": "filename — последний сегмент target.path (например, из «/ncadmin/files/Price-extractor/queue/Тест 1.txt» получаем «Тест 1.txt»). Подтверждено тестом №0 на реальном payload."
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": "=ЗАМЕНИ: id workflow #1 после импорта",
+        "mode": "each",
+        "options": { "waitForSubWorkflow": false }
+      },
+      "id": "call-workflow-1",
+      "name": "Execute Workflow #1",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [880, 200],
+      "notes": "waitForSubWorkflow=false — обработка файла занимает часы, webhook не должен держать HTTP-соединение открытым всё это время. Nextcloud получает ответ сразу после этого шага (см. «Respond 200» ниже), обработка продолжается в фоне."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"accepted\": true } }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-200",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1100, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"accepted\": false, \"reason\": \"not our folder\" } }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-200-ignored",
+      "name": "Respond 200 (не наша папка)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [440, 460],
+      "notes": "200, не 4xx/5xx — это штатный случай (широкая подписка ловит все переименования в Nextcloud), не ошибка. Nextcloud/webhook_listeners не должен ретраить или жаловаться."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"error\": \"invalid shared secret\" } }}",
+        "options": { "responseCode": 401 }
+      },
+      "id": "respond-401",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [220, 460]
+    }
+  ],
+  "connections": {
+    "Webhook (Nextcloud webhook_listeners)": {
+      "main": [[{ "node": "Проверка shared-secret", "type": "main", "index": 0 }]]
+    },
+    "Проверка shared-secret": {
+      "main": [
+        [{ "node": "Это наша папка?", "type": "main", "index": 0 }],
+        [{ "node": "Respond 401", "type": "main", "index": 0 }]
+      ]
+    },
+    "Это наша папка?": {
+      "main": [
+        [{ "node": "Собрать параметры", "type": "main", "index": 0 }],
+        [{ "node": "Respond 200 (не наша папка)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Собрать параметры": {
+      "main": [[{ "node": "Execute Workflow #1", "type": "main", "index": 0 }]]
+    },
+    "Execute Workflow #1": {
+      "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]]
+    }
+  }
+}

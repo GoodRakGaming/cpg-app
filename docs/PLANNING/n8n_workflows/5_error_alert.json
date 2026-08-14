@@ -1,0 +1,55 @@
+{
+  "name": "Phase10B #5 — Оповещение об ошибках (Error Trigger)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 300],
+      "notes": "Срабатывает только на непредвиденное падение исполнения (не на обработанную IF-ветку — раунд 2, B4). Настоящие бизнес-ошибки (частичный/полный сбой файла) шлют алерт сами из workflow #1, не отсюда."
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "name": "text",
+              "type": "string",
+              "value": "=⚠️ n8n: непредвиденная ошибка исполнения\n\nWorkflow: {{ $json.workflow?.name }}\nExecution ID: {{ $json.execution?.id }}\nОшибка: {{ $json.execution?.error?.message || $json.trigger?.error?.message }}\n\nЭто НЕ бизнес-ошибка обработки файла (та уходит отдельным сообщением из workflow #1) — это падение самого исполнения n8n. Проверить вручную: Executions → найти по execution ID выше."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "build-message",
+      "name": "Собрать сообщение",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "= ЗАМЕНИ: chat_id владельца/группы",
+        "text": "={{ $json.text }}",
+        "additionalFields": {}
+      },
+      "id": "telegram-alert",
+      "name": "Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [440, 300],
+      "notes": "Выбери существующий Telegram-credential в n8n (уже используется для других ботов) и впиши chat_id получателя."
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [[{ "node": "Собрать сообщение", "type": "main", "index": 0 }]]
+    },
+    "Собрать сообщение": {
+      "main": [[{ "node": "Telegram", "type": "main", "index": 0 }]]
+    }
+  }
+}

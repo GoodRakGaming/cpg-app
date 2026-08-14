@@ -1,0 +1,750 @@
+{
+  "name": "Phase10B #1 — Обработать файл прайса (sub-workflow, ядро)",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            { "name": "filename", "type": "string" },
+            { "name": "source_folder", "type": "string" },
+            { "name": "trigger_type", "type": "string" }
+          ]
+        }
+      },
+      "id": "entry",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 600],
+      "notes": "Вызывается из #2 (webhook, source_folder всегда 'queue/') и #4 (план Б/watchdog, source_folder = папка, где реально найден файл — раунд 4, D2)."
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            { "name": "OLLAMA_URL", "type": "string", "value": "=ЗАМЕНИ: http://<LXC 107>:11434" },
+            { "name": "INGEST_URL", "type": "string", "value": "=ЗАМЕНИ: http://192.168.1.105:3000" },
+            { "name": "RUNS_URL", "type": "string", "value": "=ЗАМЕНИ: то же, что INGEST_URL" },
+            { "name": "BATCH_SIZE", "type": "number", "value": 25 },
+            { "name": "WATCHDOG_THRESHOLD_SECONDS", "type": "number", "value": "=ЗАМЕНИ ПОСЛЕ КАЛИБРОВКИ: k × BATCH_SIZE × максимум_секунд_на_строку (раунд 3, I4). Тот же порог, что в Config workflow #4 — держи оба места синхронно." }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Раунд 4: аккумулятор для итоговых rows_success/rows_failed/failed_rows/error_summary,\n// т.к. Loop Over Items (Split In Batches) не хранит историю между итерациями сам по себе.\n// Ключ по execution ID — не переживает между разными исполнениями (правильно, нужен только на время этого запуска).\nconst staticData = $getWorkflowStaticData('node');\nstaticData[$execution.id] = { rows_success: 0, rows_failed: 0, failed_rows: [], error_parts: [] };\nreturn items;"
+      },
+      "id": "reset-accumulator",
+      "name": "Сбросить аккумулятор",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 600]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "move",
+        "path": "=ЗАМЕНИ: {{ $json.source_folder }}{{ $json.filename }}",
+        "toPath": "=ЗАМЕНИ: processing/{{ $json.filename }}",
+        "onError": "continueErrorOutput"
+      },
+      "id": "claim",
+      "name": "1. Claim",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [660, 600],
+      "notes": "Раунд 4 (D2): source_folder берётся из входного параметра, не захардкожен на queue/ — иначе claim для файлов из postponed/ получал бы 404 и тихо выпадал под видом штатного проигрыша гонки."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "leftValue": "={{ $json.error?.httpCode || $json.statusCode }}", "rightValue": "404", "operator": { "type": "string", "operation": "equals" } },
+            { "leftValue": "={{ $json.error?.httpCode || $json.statusCode }}", "rightValue": "409", "operator": { "type": "string", "operation": "equals" } }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "claim-error-check",
+      "name": "IF 404/409 (I8)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [660, 760],
+      "notes": "Только на ветке ошибки Claim (onError=continueErrorOutput второй выход). 404/409 → штатный проигрыш гонки, тихий выход. Остальное (503, таймаут) → Stop and Error, уйдёт в Error Trigger #5 (раунд 2, I8)."
+    },
+    { "parameters": {}, "id": "noop-race-claim", "name": "Конец (проигрыш гонки на claim)", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [880, 700] },
+    { "parameters": { "message": "Claim упал не на 404/409 — см. execution" }, "id": "stop-claim-error", "name": "Stop and Error", "type": "n8n-nodes-base.stopAndError", "typeVersion": 1, "position": [880, 820] },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "leftValue": "={{ $('entry').item.json.filename }}", "rightValue": ".xlsx", "operator": { "type": "string", "operation": "endsWith" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "format-check",
+      "name": "1b. Проверка формата (I5)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 480],
+      "notes": "Раунд 3 (I5): только .xlsx в списке реализованных — .csv распознаётся #3, но не реализован здесь. Запасной путь на случай ручного переноса; основной путь для неподдерживаемых форматов — прямая ветка в #3 (мелочи раунда 3)."
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "move",
+        "path": "=ЗАМЕНИ: processing/{{ $('entry').item.json.filename }}",
+        "toPath": "=ЗАМЕНИ: unsupported/{{ $('entry').item.json.filename }}"
+      },
+      "id": "move-unsupported",
+      "name": "Move → unsupported/",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [1100, 380]
+    },
+    {
+      "parameters": {
+        "chatId": "=ЗАМЕНИ: chat_id",
+        "text": "=📎 «{{ $('entry').item.json.filename }}» — формат пока не реализован (см. 10C). Перенесён в «unsupported/».",
+        "additionalFields": {}
+      },
+      "id": "telegram-unsupported",
+      "name": "Telegram: формат не поддерживается",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1320, 380]
+    },
+    { "parameters": {}, "id": "noop-unsupported", "name": "Конец (не поддерживается)", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [1540, 380] },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=ЗАМЕНИ: {{ $('Config').item.json.RUNS_URL }}/api/price-catalog/ingest-runs/active",
+        "sendQuery": true,
+        "queryParameters": { "parameters": [
+          { "name": "filename", "value": "={{ $('entry').item.json.filename }}" },
+          { "name": "status", "value": "running,ingest_completed_archive_pending" }
+        ] },
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "X-API-Key", "value": "=ЗАМЕНИ: впиши сам" }] },
+        "options": {}
+      },
+      "id": "get-active",
+      "name": "2. GET ingest-runs/active",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 600],
+      "notes": "Раунд 4 (D1): GET перед POST — узнать, есть ли уже активный/stale прогон по этому файлу, ДО того как создавать новый."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Раунд 4 (D1) — решить: создать новый прогон, возобновить (abandon старый + создать с resumed_from_run_id), или это гонка (кто-то уже ведёт живой прогон).\nconst threshold = Number($('Config').item.json.WATCHDOG_THRESHOLD_SECONDS) || Infinity;\nconst runs = $json.data && $json.data.ingest_runs ? $json.data.ingest_runs : [];\n\nif (runs.length === 0) {\n  return [{ json: { action: 'create' } }];\n}\n\nconst run = runs[0];\nif (run.status === 'ingest_completed_archive_pending') {\n  // Аномалия для этой точки (обычно ловит watchdog в #4) — не мешаем, считаем гонкой.\n  return [{ json: { action: 'race_exit' } }];\n}\n\nconst ageSeconds = (Date.now() - new Date(run.updated_at).getTime()) / 1000;\nif (ageSeconds > threshold) {\n  return [{ json: { action: 'resume', stale_run_id: run.id, stale_rows_processed: run.rows_processed, stale_failed_rows: run.failed_rows || [] } }];\n}\nreturn [{ json: { action: 'race_exit' } }];"
+      },
+      "id": "route-decision",
+      "name": "Решить: create/resume/race_exit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 600]
+    },
+    {
+      "parameters": {
+        "rules": { "values": [
+          { "outputKey": "create", "conditions": { "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "create", "operator": { "type": "string", "operation": "equals" } }] } },
+          { "outputKey": "resume", "conditions": { "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "resume", "operator": { "type": "string", "operation": "equals" } }] } },
+          { "outputKey": "race_exit", "conditions": { "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "race_exit", "operator": { "type": "string", "operation": "equals" } }] } }
+        ] },
+        "options": { "fallbackOutput": "none" }
+      },
+      "id": "switch-action",
+      "name": "Switch (action)",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1320, 600]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "move",
+        "path": "=ЗАМЕНИ: processing/{{ $('entry').item.json.filename }}",
+        "toPath": "=ЗАМЕНИ: postponed/{{ $('entry').item.json.filename }}"
+      },
+      "id": "rollback-race",
+      "name": "Откат claim → postponed/ (гонка)",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [1540, 780],
+      "notes": "Раунд 3 (C1): в postponed/, НЕ в исходную папку — Flow не слушает эту папку, повторного webhook не возникает."
+    },
+    { "parameters": {}, "id": "noop-race", "name": "Конец (гонка)", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [1760, 780] },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=ЗАМЕНИ: {{ $('Config').item.json.RUNS_URL }}/api/price-catalog/ingest-runs/{{ $json.stale_run_id }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { status: 'abandoned' } }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "X-API-Key", "value": "=ЗАМЕНИ: впиши сам" }] },
+        "options": {}
+      },
+      "id": "patch-abandon-stale",
+      "name": "PATCH abandoned (D1)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 600],
+      "notes": "Освобождает глобальный слот (C3) до создания нового прогона — иначе POST ниже сразу получит 409 от собственного же мёртвого предшественника."
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": { "assignments": [
+          { "name": "resumed_from_run_id", "type": "string", "value": "={{ $json.stale_run_id }}" },
+          { "name": "trigger_type_effective", "type": "string", "value": "watchdog" }
+        ] },
+        "options": {}
+      },
+      "id": "set-body-resume",
+      "name": "Тело POST (resume)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1760, 600]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": { "assignments": [
+          { "name": "resumed_from_run_id", "type": "string", "value": "" },
+          { "name": "trigger_type_effective", "type": "string", "value": "={{ $('entry').item.json.trigger_type }}" }
+        ] },
+        "options": {}
+      },
+      "id": "set-body-create",
+      "name": "Тело POST (create)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1540, 480]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=ЗАМЕНИ: {{ $('Config').item.json.RUNS_URL }}/api/price-catalog/ingest-runs",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { source_filename: $('entry').item.json.filename, trigger_type: $json.trigger_type_effective, resumed_from_run_id: $json.resumed_from_run_id || undefined } }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "X-API-Key", "value": "=ЗАМЕНИ: впиши сам" }] },
+        "onError": "continueErrorOutput",
+        "options": {}
+      },
+      "id": "post-create-run",
+      "name": "POST /ingest-runs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, 540],
+      "notes": "Оба пути (create/resume) сходятся сюда. 201 → сохранить run_id из ответа; 409 (второй выход, onError) → страховка C3 ниже."
+    },
+    {
+      "parameters": {
+        "jsCode": "// 409 на POST (раунд 3, C3 страховка) — блокирующий прогон мог зависнуть.\nconst threshold = Number($('Config').item.json.WATCHDOG_THRESHOLD_SECONDS) || Infinity;\nconst blockedBy = $json.data && $json.data.blocked_by ? $json.data.blocked_by : null;\nif (!blockedBy) return [{ json: { alert: false } }];\nconst ageSeconds = (Date.now() - new Date(blockedBy.updated_at).getTime()) / 1000;\nreturn [{ json: { alert: ageSeconds > threshold, blocked_by: blockedBy } }];"
+      },
+      "id": "check-blocked-stale",
+      "name": "Проверить blocked_by (C3)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 700]
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.alert }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }], "combinator": "and" },
+        "options": {}
+      },
+      "id": "if-blocked-stale",
+      "name": "IF блокирующий прогон завис",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2420, 700]
+    },
+    {
+      "parameters": {
+        "chatId": "=ЗАМЕНИ: chat_id",
+        "text": "=⚠️ Слот занят зависшим прогоном «{{ $json.blocked_by.source_filename }}» (без признаков жизни с {{ $json.blocked_by.updated_at }}). run_id: {{ $json.blocked_by.run_id }}",
+        "additionalFields": {}
+      },
+      "id": "telegram-blocked-stale",
+      "name": "Telegram: слот занят зависшим прогоном",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2640, 660]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "move",
+        "path": "=ЗАМЕНИ: processing/{{ $('entry').item.json.filename }}",
+        "toPath": "=ЗАМЕНИ: postponed/{{ $('entry').item.json.filename }}"
+      },
+      "id": "rollback-409",
+      "name": "Откат claim → postponed/ (409)",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [2860, 700]
+    },
+    { "parameters": {}, "id": "noop-409", "name": "Конец (слот занят)", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [3080, 700] },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "download",
+        "path": "=ЗАМЕНИ: processing/{{ $('entry').item.json.filename }}"
+      },
+      "id": "download",
+      "name": "3. Скачать файл",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [2200, 480]
+    },
+    {
+      "parameters": { "operation": "xlsx", "options": {} },
+      "id": "extract",
+      "name": "4. Разобрать xlsx",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [2420, 480]
+    },
+    {
+      "parameters": {
+        "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $items().length }}", "rightValue": 0, "operator": { "type": "number", "operation": "equals" } }], "combinator": "and" },
+        "options": {}
+      },
+      "id": "empty-check",
+      "name": "IF rows_total==0 (M5)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2640, 480]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=ЗАМЕНИ: {{ $('Config').item.json.RUNS_URL }}/api/price-catalog/ingest-runs/{{ $('post-create-run').item.json.data.ingest_run.id }}",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ { status: 'failed', error_summary: 'пустой файл', finished_at: new Date().toISOString() } }}",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-API-Key", "value": "=ЗАМЕНИ: впиши сам" }] },
+        "options": {}
+      },
+      "id": "patch-empty-failed",
+      "name": "PATCH failed (пустой файл)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, 380]
+    },
+    {
+      "parameters": {
+        "resource": "file", "operation": "move",
+        "path": "=ЗАМЕНИ: processing/{{ $('entry').item.json.filename }}",
+        "toPath": "=ЗАМЕНИ: errors/{{ $('entry').item.json.filename }}"
+      },
+      "id": "move-empty-errors",
+      "name": "Move → errors/ (пустой)",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [3080, 380]
+    },
+    {
+      "parameters": { "chatId": "=ЗАМЕНИ: chat_id", "text": "=❌ «{{ $('entry').item.json.filename }}» — пустой файл (0 строк). Перенесён в «errors/».", "additionalFields": {} },
+      "id": "telegram-empty",
+      "name": "Telegram: пустой файл",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [3300, 380]
+    },
+    { "parameters": {}, "id": "noop-empty", "name": "Конец (пустой файл)", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [3520, 380] },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=ЗАМЕНИ: {{ $('Config').item.json.RUNS_URL }}/api/price-catalog/ingest-runs/{{ $('post-create-run').item.json.data.ingest_run.id }}",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ { rows_total: $items().length } }}",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-API-Key", "value": "=ЗАМЕНИ: впиши сам" }] },
+        "options": {}
+      },
+      "id": "patch-rows-total",
+      "name": "PATCH rows_total",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, 540]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Раунд 4 (D3): source_row вычисляется ОДИН РАЗ, сразу после Extract, по позиции в СЫРОМ массиве —\n// до resume-фильтра и до Loop Over Items. Дальше это неизменное свойство item.\n// +2 = смещение на строку заголовка (одна строка заголовков — донастроить, если их больше).\nreturn items.map((item, i) => ({ json: { ...item.json, source_row: i + 2 } }));"
+      },
+      "id": "compute-source-row",
+      "name": "Вычислить source_row (D3)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3080, 540]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Раунд 4 (D3): resume-фильтр по абсолютному source_row. При action != 'resume' — пропустить всё как есть.\nconst decision = $('route-decision').item.json;\nif (decision.action !== 'resume') return items;\n\nconst rowsProcessed = decision.stale_rows_processed || 0;\nconst failedRows = new Set(decision.stale_failed_rows || []);\n\nreturn items.filter((item) => {\n  const row = item.json.source_row;\n  if (row > rowsProcessed) return true; // ещё не дошли в прошлый раз\n  return failedRows.has(row); // дошли, но эта строка упала — не теряем молча (раунд 4, E1/I2)\n});"
+      },
+      "id": "resume-filter",
+      "name": "5. Resume-фильтр (D3/E1)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3300, 540]
+    },
+    {
+      "parameters": {
+        "batchSize": "={{ $('Config').item.json.BATCH_SIZE }}",
+        "options": { "reset": false }
+      },
+      "id": "loop-over-items",
+      "name": "6. Loop Over Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [3520, 540],
+      "notes": "Раунд 3 (C2): центральная конструкция — без неё heartbeat/resume не существуют технически, n8n не делает построчный цикл сам по себе."
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": { "assignments": [
+          { "name": "row_text", "type": "string", "value": "=ЗАМЕНИ ЭТО ВЫРАЖЕНИЕ: собери текст строки из реальных полей после первого тестового запуска, например `Наименование: ${$json['Наименование работы']}. Ед. изм.: ${$json['Ед.изм']}. Цена: ${$json['Цена']} руб.`" },
+          { "name": "source_type", "type": "string", "value": "=ЗАМЕНИ: 'supplier' или 'own' — подтверди/поправь после первого теста" },
+          { "name": "source_detail", "type": "string", "value": "=ЗАМЕНИ: имя поставщика/источника (раунд 2, I5 — не хардкод)" }
+        ] },
+        "options": {}
+      },
+      "id": "fill-me",
+      "name": "!! ЗАПОЛНИ",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [3740, 480],
+      "notes": "source_row уже вычислен на шаге 4 (D3) — здесь ничего не пересчитывать."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=ЗАМЕНИ: {{ $('Config').item.json.OLLAMA_URL }}/api/generate",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ { model: 'devstral:24b', prompt: 'Извлеки из текста позиции прайс-листа структурированные данные.\\n\\nТекст позиции: \"' + $json.row_text.replace(/\"/g, '\\\\\"') + '\"\\n\\nВерни JSON: source_work_name, unit, price (число или null), price_qualifier (exact/from/approx/on_request), confidence (low/medium/high).', format: { type: 'object', properties: { source_work_name: { type: 'string' }, unit: { type: 'string' }, price: { type: ['number', 'null'] }, price_qualifier: { type: 'string', enum: ['exact', 'from', 'approx', 'on_request'] }, confidence: { type: 'string', enum: ['low', 'medium', 'high'] } }, required: ['source_work_name', 'unit', 'price_qualifier', 'confidence'] }, keep_alive: '30m', stream: false } }}",
+        "options": { "timeout": 180000 },
+        "retryOnFail": true,
+        "maxTries": 3
+      },
+      "id": "ollama-extract",
+      "name": "7. Извлечение полей (Ollama)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3960, 480],
+      "notes": "keep_alive:'30m' (раунд 2, I7) — против выгрузки модели посреди многочасового прогона."
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": { "assignments": [
+          { "name": "source_work_name", "type": "string", "value": "={{ JSON.parse($json.response).source_work_name }}" },
+          { "name": "unit", "type": "string", "value": "={{ JSON.parse($json.response).unit }}" },
+          { "name": "price", "type": "number", "value": "={{ JSON.parse($json.response).price }}" },
+          { "name": "price_qualifier", "type": "string", "value": "={{ JSON.parse($json.response).price_qualifier }}" },
+          { "name": "confidence", "type": "string", "value": "={{ JSON.parse($json.response).confidence }}" },
+          { "name": "raw_extraction", "type": "object", "value": "={{ { snippet: $('fill-me').item.json.row_text, source_row: $('fill-me').item.json.source_row, run_id: $('post-create-run').item.json.data.ingest_run.id } }}" }
+        ] },
+        "options": {}
+      },
+      "id": "build-payload",
+      "name": "8. Собрать payload для ingest",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [4180, 480]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=ЗАМЕНИ: {{ $('Config').item.json.INGEST_URL }}/api/price-catalog/ingest",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ { source_work_name: $json.source_work_name, unit: $json.unit, price: $json.price, price_qualifier: $json.price_qualifier, confidence: $json.confidence, source_type: $('fill-me').item.json.source_type, source_detail: $('fill-me').item.json.source_detail, raw_extraction: $json.raw_extraction } }}",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-API-Key", "value": "=ЗАМЕНИ: впиши сам" }] },
+        "onError": "continueErrorOutput",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "options": {}
+      },
+      "id": "ingest-call",
+      "name": "9. POST ingest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4400, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 10. Пометить item ok:true/false (раунд 2, I6 — не накапливать счётчик императивно здесь).\nconst sourceRow = $('fill-me').item.json.source_row;\nconst ok = $json.success !== false && !$json.error;\nreturn [{ json: { source_row: sourceRow, ok, error: ok ? null : ($json.error?.message || 'ingest failed') } }];"
+      },
+      "id": "mark-ok",
+      "name": "10. Пометить ok/fail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4620, 480]
+    },
+    {
+      "parameters": { "aggregate": "aggregateAllItemData", "destinationFieldName": "batch_items" },
+      "id": "aggregate-batch",
+      "name": "Собрать батч",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [4840, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 11. Heartbeat — конец итерации батча (раунд 4, I1: после ingest, не между Ollama и ingest; D3: max(source_row), не (итерация+1)×batch_size).\nconst batch = $json.batch_items.map((i) => i.json);\nconst maxSourceRow = Math.max(...batch.map((b) => b.source_row));\nconst failedThisBatch = batch.filter((b) => !b.ok).map((b) => b.source_row);\n\nconst staticData = $getWorkflowStaticData('node');\nconst acc = staticData[$execution.id];\nacc.rows_success += batch.filter((b) => b.ok).length;\nacc.rows_failed += failedThisBatch.length;\nacc.failed_rows.push(...failedThisBatch);\nbatch.filter((b) => !b.ok).forEach((b) => acc.error_parts.push(`строка ${b.source_row}: ${b.error}`));\n\nreturn [{ json: { rows_processed: maxSourceRow, failed_rows: acc.failed_rows } }];"
+      },
+      "id": "batch-heartbeat-calc",
+      "name": "Посчитать heartbeat",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5060, 480]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=ЗАМЕНИ: {{ $('Config').item.json.RUNS_URL }}/api/price-catalog/ingest-runs/{{ $('post-create-run').item.json.data.ingest_run.id }}",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ { rows_processed: $json.rows_processed, failed_rows: $json.failed_rows } }}",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-API-Key", "value": "=ЗАМЕНИ: впиши сам" }] },
+        "options": {}
+      },
+      "id": "patch-heartbeat",
+      "name": "11. PATCH heartbeat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [5280, 480],
+      "notes": "updated_at обновляется сервером на КАЖДЫЙ PATCH автоматически (см. роут) — это и есть сигнал watchdog'у, что прогон жив."
+    },
+    {
+      "parameters": {
+        "jsCode": "// 12. Финальный подсчёт по завершении цикла (все батчи пройдены).\nconst staticData = $getWorkflowStaticData('node');\nconst acc = staticData[$execution.id];\nconst errorSummary = acc.error_parts.slice(0, 20).join('\\n') + (acc.error_parts.length > 20 ? `\\n...и ещё ${acc.error_parts.length - 20}` : '');\nreturn [{ json: { rows_success: acc.rows_success, rows_failed: acc.rows_failed, failed_rows: acc.failed_rows, error_summary: errorSummary || null } }];"
+      },
+      "id": "final-tally",
+      "name": "12. Финальный подсчёт",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3740, 700]
+    },
+    {
+      "parameters": {
+        "rules": { "values": [
+          { "outputKey": "all_failed", "conditions": { "conditions": [{ "leftValue": "={{ $json.rows_success }}", "rightValue": 0, "operator": { "type": "number", "operation": "equals" } }] } },
+          { "outputKey": "partial", "conditions": { "conditions": [{ "leftValue": "={{ $json.rows_failed }}", "rightValue": 0, "operator": { "type": "number", "operation": "gt" } }] } }
+        ] },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "outcome-switch",
+      "name": "13. Switch (итог)",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [3960, 700],
+      "notes": "fallbackOutput 'extra' = все строки успешны (rows_failed==0 и rows_success>0)."
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=ЗАМЕНИ: {{ $('Config').item.json.RUNS_URL }}/api/price-catalog/ingest-runs/{{ $('post-create-run').item.json.data.ingest_run.id }}",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ { status: 'failed', error_summary: $json.error_summary, finished_at: new Date().toISOString() } }}",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-API-Key", "value": "=ЗАМЕНИ: впиши сам" }] },
+        "options": {}
+      },
+      "id": "patch-all-failed",
+      "name": "PATCH failed (весь файл)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4180, 620]
+    },
+    {
+      "parameters": { "resource": "file", "operation": "move", "path": "=ЗАМЕНИ: processing/{{ $('entry').item.json.filename }}", "toPath": "=ЗАМЕНИ: errors/{{ $('entry').item.json.filename }}" },
+      "id": "move-all-failed-errors",
+      "name": "Move → errors/ (весь файл)",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [4400, 620]
+    },
+    {
+      "parameters": { "chatId": "=ЗАМЕНИ: chat_id", "text": "=❌ «{{ $('entry').item.json.filename }}» — обработка провалилась целиком (0 успешных строк). {{ $json.error_summary }}", "additionalFields": {}, "onError": "continueRegularOutput" },
+      "id": "telegram-all-failed",
+      "name": "Telegram: файл провалился (B4)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [4620, 620]
+    },
+    { "parameters": {}, "id": "noop-all-failed", "name": "Конец (весь файл failed)", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [4840, 620] },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=ЗАМЕНИ: {{ $('Config').item.json.RUNS_URL }}/api/price-catalog/ingest-runs/{{ $('post-create-run').item.json.data.ingest_run.id }}",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ { status: 'completed_with_errors', rows_success: $json.rows_success, rows_failed: $json.rows_failed, failed_rows: $json.failed_rows, error_summary: $json.error_summary, finished_at: new Date().toISOString() } }}",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-API-Key", "value": "=ЗАМЕНИ: впиши сам" }] },
+        "options": {}
+      },
+      "id": "patch-partial",
+      "name": "PATCH completed_with_errors",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4180, 760],
+      "notes": "Раунд 3 (I7): finished_at здесь уместен — это терминальный статус."
+    },
+    {
+      "parameters": { "chatId": "=ЗАМЕНИ: chat_id", "text": "=⚠️ «{{ $('entry').item.json.filename }}» — обработан частично ({{ $json.rows_success }} успешно, {{ $json.rows_failed }} с ошибками). {{ $json.error_summary }}", "additionalFields": {}, "onError": "continueRegularOutput" },
+      "id": "telegram-partial",
+      "name": "Telegram: частичный сбой (B4)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [4400, 760],
+      "notes": "onError=continueRegularOutput (мелочи раунда 4) — падение самого уведомления не должно ронять исполнение, которое по сути уже завершилось."
+    },
+    {
+      "parameters": { "resource": "file", "operation": "move", "path": "=ЗАМЕНИ: processing/{{ $('entry').item.json.filename }}", "toPath": "=ЗАМЕНИ: archive/{{ $now.format('yyyy-MM-dd') }}/{{ $('entry').item.json.filename }}" },
+      "id": "move-archive-partial",
+      "name": "14. Move → archive/<дата>/ (partial)",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [4620, 760],
+      "notes": "Раунд 2 (I4): completed_with_errors — не в errors/, продолжаем к архивации."
+    },
+    { "parameters": {}, "id": "noop-partial", "name": "Конец (частичный успех)", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [4840, 760] },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=ЗАМЕНИ: {{ $('Config').item.json.RUNS_URL }}/api/price-catalog/ingest-runs/{{ $('post-create-run').item.json.data.ingest_run.id }}",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ { status: 'ingest_completed_archive_pending', rows_success: $json.rows_success } }}",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-API-Key", "value": "=ЗАМЕНИ: впиши сам" }] },
+        "options": {}
+      },
+      "id": "patch-archive-pending",
+      "name": "PATCH ingest_completed_archive_pending",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4180, 900],
+      "notes": "Раунд 3 (I7): БЕЗ finished_at — не терминальный статус, архивация ещё не подтверждена."
+    },
+    {
+      "parameters": { "resource": "file", "operation": "move", "path": "=ЗАМЕНИ: processing/{{ $('entry').item.json.filename }}", "toPath": "=ЗАМЕНИ: archive/{{ $now.format('yyyy-MM-dd') }}/{{ $('entry').item.json.filename }}" },
+      "id": "move-archive-success",
+      "name": "14. Move → archive/<дата>/ (success)",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [4400, 900]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=ЗАМЕНИ: {{ $('Config').item.json.RUNS_URL }}/api/price-catalog/ingest-runs/{{ $('post-create-run').item.json.data.ingest_run.id }}",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ { status: 'completed', finished_at: new Date().toISOString() } }}",
+        "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-API-Key", "value": "=ЗАМЕНИ: впиши сам" }] },
+        "options": {}
+      },
+      "id": "patch-completed-final",
+      "name": "PATCH completed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4620, 900]
+    },
+    { "parameters": {}, "id": "noop-success", "name": "Конец (успех)", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [4840, 900] }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": { "main": [[{ "node": "Сбросить аккумулятор", "type": "main", "index": 0 }]] },
+    "Сбросить аккумулятор": { "main": [[{ "node": "1. Claim", "type": "main", "index": 0 }]] },
+    "1. Claim": { "main": [
+      [{ "node": "1b. Проверка формата (I5)", "type": "main", "index": 0 }],
+      [{ "node": "IF 404/409 (I8)", "type": "main", "index": 0 }]
+    ] },
+    "IF 404/409 (I8)": { "main": [
+      [{ "node": "Конец (проигрыш гонки на claim)", "type": "main", "index": 0 }],
+      [{ "node": "Stop and Error", "type": "main", "index": 0 }]
+    ] },
+    "1b. Проверка формата (I5)": { "main": [
+      [{ "node": "2. GET ingest-runs/active", "type": "main", "index": 0 }],
+      [{ "node": "Move → unsupported/", "type": "main", "index": 0 }]
+    ] },
+    "Move → unsupported/": { "main": [[{ "node": "Telegram: формат не поддерживается", "type": "main", "index": 0 }]] },
+    "Telegram: формат не поддерживается": { "main": [[{ "node": "Конец (не поддерживается)", "type": "main", "index": 0 }]] },
+    "2. GET ingest-runs/active": { "main": [[{ "node": "Решить: create/resume/race_exit", "type": "main", "index": 0 }]] },
+    "Решить: create/resume/race_exit": { "main": [[{ "node": "Switch (action)", "type": "main", "index": 0 }]] },
+    "Switch (action)": { "main": [
+      [{ "node": "Тело POST (create)", "type": "main", "index": 0 }],
+      [{ "node": "PATCH abandoned (D1)", "type": "main", "index": 0 }],
+      [{ "node": "Откат claim → postponed/ (гонка)", "type": "main", "index": 0 }]
+    ] },
+    "Откат claim → postponed/ (гонка)": { "main": [[{ "node": "Конец (гонка)", "type": "main", "index": 0 }]] },
+    "PATCH abandoned (D1)": { "main": [[{ "node": "Тело POST (resume)", "type": "main", "index": 0 }]] },
+    "Тело POST (resume)": { "main": [[{ "node": "POST /ingest-runs", "type": "main", "index": 0 }]] },
+    "Тело POST (create)": { "main": [[{ "node": "POST /ingest-runs", "type": "main", "index": 0 }]] },
+    "POST /ingest-runs": { "main": [
+      [{ "node": "3. Скачать файл", "type": "main", "index": 0 }],
+      [{ "node": "Проверить blocked_by (C3)", "type": "main", "index": 0 }]
+    ] },
+    "Проверить blocked_by (C3)": { "main": [[{ "node": "IF блокирующий прогон завис", "type": "main", "index": 0 }]] },
+    "IF блокирующий прогон завис": { "main": [
+      [{ "node": "Telegram: слот занят зависшим прогоном", "type": "main", "index": 0 }],
+      [{ "node": "Откат claim → postponed/ (409)", "type": "main", "index": 0 }]
+    ] },
+    "Telegram: слот занят зависшим прогоном": { "main": [[{ "node": "Откат claim → postponed/ (409)", "type": "main", "index": 0 }]] },
+    "Откат claim → postponed/ (409)": { "main": [[{ "node": "Конец (слот занят)", "type": "main", "index": 0 }]] },
+    "3. Скачать файл": { "main": [[{ "node": "4. Разобрать xlsx", "type": "main", "index": 0 }]] },
+    "4. Разобрать xlsx": { "main": [[{ "node": "IF rows_total==0 (M5)", "type": "main", "index": 0 }]] },
+    "IF rows_total==0 (M5)": { "main": [
+      [{ "node": "PATCH failed (пустой файл)", "type": "main", "index": 0 }],
+      [{ "node": "PATCH rows_total", "type": "main", "index": 0 }]
+    ] },
+    "PATCH failed (пустой файл)": { "main": [[{ "node": "Move → errors/ (пустой)", "type": "main", "index": 0 }]] },
+    "Move → errors/ (пустой)": { "main": [[{ "node": "Telegram: пустой файл", "type": "main", "index": 0 }]] },
+    "Telegram: пустой файл": { "main": [[{ "node": "Конец (пустой файл)", "type": "main", "index": 0 }]] },
+    "PATCH rows_total": { "main": [[{ "node": "Вычислить source_row (D3)", "type": "main", "index": 0 }]] },
+    "Вычислить source_row (D3)": { "main": [[{ "node": "5. Resume-фильтр (D3/E1)", "type": "main", "index": 0 }]] },
+    "5. Resume-фильтр (D3/E1)": { "main": [[{ "node": "6. Loop Over Items", "type": "main", "index": 0 }]] },
+    "6. Loop Over Items": { "main": [
+      [{ "node": "12. Финальный подсчёт", "type": "main", "index": 0 }],
+      [{ "node": "!! ЗАПОЛНИ", "type": "main", "index": 0 }]
+    ] },
+    "!! ЗАПОЛНИ": { "main": [[{ "node": "7. Извлечение полей (Ollama)", "type": "main", "index": 0 }]] },
+    "7. Извлечение полей (Ollama)": { "main": [[{ "node": "8. Собрать payload для ingest", "type": "main", "index": 0 }]] },
+    "8. Собрать payload для ingest": { "main": [[{ "node": "9. POST ingest", "type": "main", "index": 0 }]] },
+    "9. POST ingest": { "main": [
+      [{ "node": "10. Пометить ok/fail", "type": "main", "index": 0 }],
+      [{ "node": "10. Пометить ok/fail", "type": "main", "index": 0 }]
+    ] },
+    "10. Пометить ok/fail": { "main": [[{ "node": "Собрать батч", "type": "main", "index": 0 }]] },
+    "Собрать батч": { "main": [[{ "node": "Посчитать heartbeat", "type": "main", "index": 0 }]] },
+    "Посчитать heartbeat": { "main": [[{ "node": "11. PATCH heartbeat", "type": "main", "index": 0 }]] },
+    "11. PATCH heartbeat": { "main": [[{ "node": "6. Loop Over Items", "type": "main", "index": 0 }]] },
+    "12. Финальный подсчёт": { "main": [[{ "node": "13. Switch (итог)", "type": "main", "index": 0 }]] },
+    "13. Switch (итог)": { "main": [
+      [{ "node": "PATCH failed (весь файл)", "type": "main", "index": 0 }],
+      [{ "node": "PATCH completed_with_errors", "type": "main", "index": 0 }],
+      [{ "node": "PATCH ingest_completed_archive_pending", "type": "main", "index": 0 }]
+    ] },
+    "PATCH failed (весь файл)": { "main": [[{ "node": "Move → errors/ (весь файл)", "type": "main", "index": 0 }]] },
+    "Move → errors/ (весь файл)": { "main": [[{ "node": "Telegram: файл провалился (B4)", "type": "main", "index": 0 }]] },
+    "Telegram: файл провалился (B4)": { "main": [[{ "node": "Конец (весь файл failed)", "type": "main", "index": 0 }]] },
+    "PATCH completed_with_errors": { "main": [[{ "node": "Telegram: частичный сбой (B4)", "type": "main", "index": 0 }]] },
+    "Telegram: частичный сбой (B4)": { "main": [[{ "node": "14. Move → archive/<дата>/ (partial)", "type": "main", "index": 0 }]] },
+    "14. Move → archive/<дата>/ (partial)": { "main": [[{ "node": "Конец (частичный успех)", "type": "main", "index": 0 }]] },
+    "PATCH ingest_completed_archive_pending": { "main": [[{ "node": "14. Move → archive/<дата>/ (success)", "type": "main", "index": 0 }]] },
+    "14. Move → archive/<дата>/ (success)": { "main": [[{ "node": "PATCH completed", "type": "main", "index": 0 }]] },
+    "PATCH completed": { "main": [[{ "node": "Конец (успех)", "type": "main", "index": 0 }]] }
+  }
+}

@@ -1,0 +1,359 @@
+{
+  "name": "Phase10B #4 — Триггер: план Б / watchdog",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 140]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": { "assignments": [{ "name": "trigger_type", "type": "string", "value": "manual" }] },
+        "options": {}
+      },
+      "id": "tag-manual",
+      "name": "trigger_type='manual'",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 140]
+    },
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 15 }] }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 320],
+      "notes": "Раунд 4 (E2): ОДИН Schedule, активный с первого дня — гейт калибровки стоит только перед watchdog-веткой ниже, не здесь. Интервал (15 мин — плейсхолдер) решить при сборке."
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": { "assignments": [{ "name": "trigger_type", "type": "string", "value": "schedule" }] },
+        "options": {}
+      },
+      "id": "tag-schedule",
+      "name": "trigger_type='schedule'",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 320]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            { "name": "WATCHDOG_THRESHOLD_SECONDS", "type": "number", "value": "=ЗАМЕНИ ПОСЛЕ КАЛИБРОВКИ: k × 25 × максимум_секунд_на_строку (раунд 3, I4) — пусто/0 = watchdog-ветка выключена (раунд 4, E2)" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "config",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 230]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "list",
+        "path": "=ЗАМЕНИ: путь к папке queue/"
+      },
+      "id": "list-queue",
+      "name": "List (queue/)",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [660, 80]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": { "assignments": [{ "name": "source_folder", "type": "string", "value": "queue/" }, { "name": "filename", "type": "string", "value": "={{ $json.basename || $json.name }}" }] },
+        "options": {}
+      },
+      "id": "tag-queue",
+      "name": "tag source_folder='queue/'",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [880, 80]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "list",
+        "path": "=ЗАМЕНИ: путь к папке postponed/"
+      },
+      "id": "list-postponed",
+      "name": "List (postponed/)",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [660, 220],
+      "notes": "Раунд 3 (C1): план Б сканирует postponed/ наравне с queue/ — сюда попадают файлы после отката claim (409) и после эвакуации watchdog'ом."
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": { "assignments": [{ "name": "source_folder", "type": "string", "value": "postponed/" }, { "name": "filename", "type": "string", "value": "={{ $json.basename || $json.name }}" }] },
+        "options": {}
+      },
+      "id": "tag-postponed",
+      "name": "tag source_folder='postponed/'",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [880, 220]
+    },
+    {
+      "parameters": { "mode": "combine", "combinationMode": "multiplex" },
+      "id": "merge-queue-postponed",
+      "name": "Merge (объединить списки)",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1100, 150]
+    },
+    {
+      "parameters": { "options": { "reset": false } },
+      "id": "loop-queue",
+      "name": "Loop Over Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1320, 150]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": "=ЗАМЕНИ: id workflow #1 после импорта",
+        "mode": "each",
+        "options": { "waitForSubWorkflow": false }
+      },
+      "id": "call-workflow-1-queue",
+      "name": "Execute Workflow #1",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1540, 150],
+      "notes": "Передаёт filename + source_folder (раунд 4, D2 — claim берёт папку из этого параметра, не захардкожен на queue/) + trigger_type. Claim внутри #1 сам разберётся, если файл уже забрал webhook (404 — штатный проигрыш гонки, I8)."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "leftValue": "={{ $('Config').item.json.WATCHDOG_THRESHOLD_SECONDS }}", "rightValue": 0, "operator": { "type": "number", "operation": "gt" } }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-threshold-set",
+      "name": "IF порог задан?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [660, 400],
+      "notes": "Раунд 4 (E2): гейт калибровки стоит ТОЛЬКО здесь, не на всём Schedule Trigger. False → watchdog-ветка не выполняется вовсе, файлы всё равно эвакуируются вручную (Manual) или ждут калибровки."
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "list",
+        "path": "=ЗАМЕНИ: путь к папке processing/"
+      },
+      "id": "list-processing",
+      "name": "List (processing/)",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [880, 400]
+    },
+    {
+      "parameters": { "options": { "reset": false } },
+      "id": "loop-processing",
+      "name": "Loop Over Items ",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1100, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=ЗАМЕНИ RUNS_URL/api/price-catalog/ingest-runs/active",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "filename", "value": "={{ $json.basename || $json.name }}" },
+            { "name": "status", "value": "running,ingest_completed_archive_pending" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "X-API-Key", "value": "=ЗАМЕНИ: впиши сам, не проси у ассистента" }] },
+        "options": {}
+      },
+      "id": "get-active",
+      "name": "GET ingest-runs/active",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 400],
+      "notes": "Раунд 4 (D1): watchdog различает running/ingest_completed_archive_pending/нет записи одним вызовом — см. ?status= в описании роута (PHASE_10B_level0_ingestion_plan.md)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Классификация по раунду 3 (B1/I3) и раунду 4 (D1).\nconst filename = $('Loop Over Items ').item.json.basename || $('Loop Over Items ').item.json.name;\nconst threshold = Number($('Config').item.json.WATCHDOG_THRESHOLD_SECONDS) || 0;\nconst runs = $json.data && $json.data.ingest_runs ? $json.data.ingest_runs : [];\n\nif (runs.length === 0) {\n  return [{ json: { filename, verdict: 'not_found' } }];\n}\n\nconst run = runs[0];\nif (run.status === 'ingest_completed_archive_pending') {\n  return [{ json: { filename, verdict: 'archive_pending', run_id: run.id } }];\n}\n\n// status === 'running'\nconst ageSeconds = (Date.now() - new Date(run.updated_at).getTime()) / 1000;\nif (ageSeconds > threshold) {\n  return [{ json: { filename, verdict: 'stale_running', run_id: run.id } }];\n}\nreturn [{ json: { filename, verdict: 'alive_running', run_id: run.id } }];"
+      },
+      "id": "classify-watchdog",
+      "name": "Классифицировать (D1/I3)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "outputKey": "stale_running", "conditions": { "conditions": [{ "leftValue": "={{ $json.verdict }}", "rightValue": "stale_running", "operator": { "type": "string", "operation": "equals" } }] } },
+            { "outputKey": "archive_pending", "conditions": { "conditions": [{ "leftValue": "={{ $json.verdict }}", "rightValue": "archive_pending", "operator": { "type": "string", "operation": "equals" } }] } },
+            { "outputKey": "not_found", "conditions": { "conditions": [{ "leftValue": "={{ $json.verdict }}", "rightValue": "not_found", "operator": { "type": "string", "operation": "equals" } }] } }
+          ]
+        },
+        "options": { "fallbackOutput": "none" }
+      },
+      "id": "switch-verdict",
+      "name": "Switch (verdict)",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1760, 400],
+      "notes": "fallbackOutput=none — 'alive_running' никуда не идёт: живой прогон не трогаем, это и есть весь смысл heartbeat (раунд 2, B1)."
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=ЗАМЕНИ RUNS_URL/api/price-catalog/ingest-runs/{{ $json.run_id }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { status: 'abandoned' } }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "X-API-Key", "value": "=ЗАМЕНИ: впиши сам" }] },
+        "options": {}
+      },
+      "id": "patch-abandoned",
+      "name": "PATCH abandoned",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, 260],
+      "notes": "Раунд 4 (D1): освобождает глобальный слот C3 — без этого шага следующий прогон того же файла получил бы 409 от собственного мёртвого предшественника."
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "move",
+        "path": "=ЗАМЕНИ: processing/{{ $json.filename }}",
+        "toPath": "=ЗАМЕНИ: postponed/{{ $json.filename }}"
+      },
+      "id": "move-stale-to-postponed",
+      "name": "Move → postponed/ (stale)",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [2200, 260],
+      "notes": "Раунд 3 (C1): в postponed/, НЕ в queue/ — Flow не слушает эту папку, повторного webhook не будет. Подхватит план Б (эта же ветка «Обычная очередь» выше) при следующем срабатывании."
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "move",
+        "path": "=ЗАМЕНИ: processing/{{ $json.filename }}",
+        "toPath": "=ЗАМЕНИ: archive/{{ $now.format('yyyy-MM-dd') }}/{{ $json.filename }}"
+      },
+      "id": "move-archive-pending",
+      "name": "Move → archive/<дата>/",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [1980, 400],
+      "notes": "Повторить ТОЛЬКО move в архив (раунд 2) — LLM уже отработала, ingest уже принят, не хватало только переноса файла."
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=ЗАМЕНИ RUNS_URL/api/price-catalog/ingest-runs/{{ $json.run_id }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { status: 'completed', finished_at: new Date().toISOString() } }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "X-API-Key", "value": "=ЗАМЕНИ: впиши сам" }] },
+        "options": {}
+      },
+      "id": "patch-completed",
+      "name": "PATCH completed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, 400]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "move",
+        "path": "=ЗАМЕНИ: processing/{{ $json.filename }}",
+        "toPath": "=ЗАМЕНИ: postponed/{{ $json.filename }}"
+      },
+      "id": "move-notfound-to-postponed",
+      "name": "Move → postponed/ (нет записи)",
+      "type": "n8n-nodes-base.nextCloud",
+      "typeVersion": 1,
+      "position": [1980, 540],
+      "notes": "Раунд 2, I3 — записи прогона нет вовсе (claim прошёл, POST /ingest-runs не создал запись — редкий случай сбоя между шагами). Не PATCH — нечего обновлять."
+    },
+    {
+      "parameters": {
+        "chatId": "=ЗАМЕНИ: chat_id владельца/группы",
+        "text": "=⚠️ Watchdog: файл «{{ $json.filename }}» найден в «processing/» без записи прогона в БД. Перенесён в «postponed/», план Б подхватит при следующем срабатывании. Проверить вручную, если повторяется часто.",
+        "additionalFields": {}
+      },
+      "id": "telegram-notfound",
+      "name": "Telegram: запись не найдена",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2200, 540]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": { "main": [[{ "node": "trigger_type='manual'", "type": "main", "index": 0 }]] },
+    "trigger_type='manual'": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Schedule Trigger": { "main": [[{ "node": "trigger_type='schedule'", "type": "main", "index": 0 }]] },
+    "trigger_type='schedule'": { "main": [[{ "node": "Config", "type": "main", "index": 0 }]] },
+    "Config": {
+      "main": [[
+        { "node": "List (queue/)", "type": "main", "index": 0 },
+        { "node": "List (postponed/)", "type": "main", "index": 0 },
+        { "node": "IF порог задан?", "type": "main", "index": 0 }
+      ]]
+    },
+    "List (queue/)": { "main": [[{ "node": "tag source_folder='queue/'", "type": "main", "index": 0 }]] },
+    "tag source_folder='queue/'": { "main": [[{ "node": "Merge (объединить списки)", "type": "main", "index": 0 }]] },
+    "List (postponed/)": { "main": [[{ "node": "tag source_folder='postponed/'", "type": "main", "index": 0 }]] },
+    "tag source_folder='postponed/'": { "main": [[{ "node": "Merge (объединить списки)", "type": "main", "index": 1 }]] },
+    "Merge (объединить списки)": { "main": [[{ "node": "Loop Over Items", "type": "main", "index": 0 }]] },
+    "Loop Over Items": { "main": [[{ "node": "Execute Workflow #1", "type": "main", "index": 0 }]] },
+    "IF порог задан?": {
+      "main": [
+        [{ "node": "List (processing/)", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "List (processing/)": { "main": [[{ "node": "Loop Over Items ", "type": "main", "index": 0 }]] },
+    "Loop Over Items ": { "main": [[{ "node": "GET ingest-runs/active", "type": "main", "index": 0 }]] },
+    "GET ingest-runs/active": { "main": [[{ "node": "Классифицировать (D1/I3)", "type": "main", "index": 0 }]] },
+    "Классифицировать (D1/I3)": { "main": [[{ "node": "Switch (verdict)", "type": "main", "index": 0 }]] },
+    "Switch (verdict)": {
+      "main": [
+        [{ "node": "PATCH abandoned", "type": "main", "index": 0 }],
+        [{ "node": "Move → archive/<дата>/", "type": "main", "index": 0 }],
+        [{ "node": "Move → postponed/ (нет записи)", "type": "main", "index": 0 }]
+      ]
+    },
+    "PATCH abandoned": { "main": [[{ "node": "Move → postponed/ (stale)", "type": "main", "index": 0 }]] },
+    "Move → archive/<дата>/": { "main": [[{ "node": "PATCH completed", "type": "main", "index": 0 }]] },
+    "Move → postponed/ (нет записи)": { "main": [[{ "node": "Telegram: запись не найдена", "type": "main", "index": 0 }]] }
+  }
+}

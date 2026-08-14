@@ -12,8 +12,10 @@ const {
   updatePriceCatalogSchema,
   renameCanonicalSchema,
   sendGroupToReviewSchema,
+  createIngestRunSchema,
+  updateIngestRunSchema,
 } = require('../validators');
-const { PriceCatalog, PriceCatalogAudit, sequelize } = require('../models');
+const { PriceCatalog, PriceCatalogAudit, N8nIngestRun, sequelize } = require('../models');
 const librarianService = require('../services/librarianService');
 
 const router = express.Router();
@@ -83,6 +85,26 @@ function serialize(entry) {
     reviewed_at: entry.reviewed_at,
     created_at: entry.createdAt,
     updated_at: entry.updatedAt,
+  };
+}
+
+function serializeIngestRun(run) {
+  return {
+    id: run.id,
+    source_filename: run.source_filename,
+    nextcloud_file_id: run.nextcloud_file_id,
+    resumed_from_run_id: run.resumed_from_run_id,
+    trigger_type: run.trigger_type,
+    status: run.status,
+    rows_total: run.rows_total,
+    rows_processed: run.rows_processed,
+    rows_success: run.rows_success,
+    rows_failed: run.rows_failed,
+    failed_rows: run.failed_rows,
+    error_summary: run.error_summary,
+    started_at: run.started_at,
+    updated_at: run.updated_at,
+    finished_at: run.finished_at,
   };
 }
 
@@ -534,6 +556,173 @@ router.post('/send-to-review', authenticateToken, requireAdmin, async (req, res,
       success: true,
       data: { sent_to_review_count: result.count },
       message: `Отправлено на пересмотр записей: ${result.count}`,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/price-catalog/ingest-runs
+ * Создать запись прогона n8n (шаг 2 workflow #1, Phase 10B) — всегда status='running'.
+ * Уникальный индекс `n8n_ingest_runs_single_active` (status='running') — глобальный слот на
+ * единственную GPU (раунд 3, C3): второй одновременный прогон получает 409 с `blocked_by`, чтобы
+ * вызывающая сторона могла решить, не завис ли блокирующий прогон (раунд 3, страховка при C3).
+ */
+router.post('/ingest-runs', requireIngestApiKey, async (req, res, next) => {
+  try {
+    const { error, value } = createIngestRunSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: { status: 400, message: error.details[0].message },
+      });
+    }
+
+    let created;
+    try {
+      created = await N8nIngestRun.create({
+        source_filename: value.source_filename,
+        nextcloud_file_id: value.nextcloud_file_id || null,
+        resumed_from_run_id: value.resumed_from_run_id || null,
+        trigger_type: value.trigger_type,
+        status: 'running',
+      });
+    } catch (createErr) {
+      if (createErr.name !== 'SequelizeUniqueConstraintError') throw createErr;
+
+      const blocking = await N8nIngestRun.findOne({ where: { status: 'running' } });
+      return res.status(409).json({
+        success: false,
+        error: { status: 409, message: 'Глобальный слот занят другим прогоном' },
+        data: {
+          blocked_by: blocking
+            ? {
+                run_id: blocking.id,
+                source_filename: blocking.source_filename,
+                updated_at: blocking.updated_at,
+              }
+            : null,
+        },
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      data: { ingest_run: serializeIngestRun(created) },
+      message: 'Прогон создан',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PATCH /api/price-catalog/ingest-runs/:id
+ * Heartbeat/переход статуса (шаги 4, 8, 11-14 workflow #1; эвакуация watchdog'ом в workflow #4 —
+ * status='abandoned', раунд 4 D1). `updated_at` обновляется на КАЖДЫЙ вызов автоматически — это и
+ * есть heartbeat (раунд 2, B1), не то, что должен присылать вызывающий.
+ */
+router.patch('/ingest-runs/:id', requireIngestApiKey, async (req, res, next) => {
+  try {
+    const run = await N8nIngestRun.findByPk(req.params.id);
+    if (!run) {
+      return res.status(404).json({
+        success: false,
+        error: { status: 404, message: 'Прогон не найден' },
+      });
+    }
+
+    const { error, value } = updateIngestRunSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: { status: 400, message: error.details[0].message },
+      });
+    }
+
+    Object.assign(run, value);
+    run.updated_at = new Date();
+    await run.save();
+
+    return res.status(200).json({
+      success: true,
+      data: { ingest_run: serializeIngestRun(run) },
+      message: 'Прогон обновлён',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/price-catalog/ingest-runs/active?filename=&status=
+ * Узкий эндпоинт под ingest-ключом (раунд 2, I2) — то, что нужно watchdog'у (workflow #4) и
+ * шагу 2 workflow #1 (раунд 4, D1 — GET перед POST, проверить активный/stale прогон по файлу)
+ * без выдачи полной истории по ingest-ключу. `?filename=` фильтрует по source_filename — основной
+ * путь поиска (раунд 3, I3 — nextcloud_file_id может быть недоступен без PROPFIND).
+ *
+ * `?status=` по умолчанию `running` (обычное использование — шаг 2 workflow #1, глобальный слот).
+ * Watchdog (workflow #4) должен различать три исхода для файла в `В обработке/`: `running`
+ * (возможно stale), `ingest_completed_archive_pending` (LLM закончила, не хватило только move) и
+ * «записи нет» (I3) — поэтому принимает список статусов через запятую, например
+ * `status=running,ingest_completed_archive_pending`, чтобы одним вызовом получить актуальный
+ * статус файла, если он вообще есть.
+ */
+router.get('/ingest-runs/active', requireIngestApiKey, async (req, res, next) => {
+  try {
+    const statuses = req.query.status
+      ? req.query.status.split(',').map((s) => s.trim()).filter(Boolean)
+      : ['running'];
+    const where = { status: { [Op.in]: statuses } };
+    if (req.query.filename) where.source_filename = req.query.filename;
+    if (req.query.nextcloud_file_id) where.nextcloud_file_id = req.query.nextcloud_file_id;
+
+    const runs = await N8nIngestRun.findAll({ where, order: [['started_at', 'DESC']] });
+
+    return res.status(200).json({
+      success: true,
+      data: { ingest_runs: runs.map(serializeIngestRun) },
+      message: `Найдено прогонов: ${runs.length}`,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/price-catalog/ingest-runs?status=&limit=&offset=
+ * Полный список под JWT — для будущего экрана в дашборде (не в рамках Phase 10B, пока смотреть
+ * через psql). Отдельно от /active — тот под ingest-ключом и не отдаёт историю.
+ */
+router.get('/ingest-runs', authenticateToken, async (req, res, next) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const offset = parseInt(req.query.offset) || 0;
+
+    const where = {};
+    if (req.query.status) where.status = req.query.status;
+
+    const { count, rows } = await N8nIngestRun.findAndCountAll({
+      where,
+      limit,
+      offset,
+      order: [['started_at', 'DESC']],
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        ingest_runs: rows.map(serializeIngestRun),
+        pagination: {
+          total: count,
+          limit,
+          offset,
+          page: Math.floor(offset / limit) + 1,
+          pages: Math.ceil(count / limit),
+        },
+      },
+      message: `Получено ${count} прогонов`,
     });
   } catch (err) {
     next(err);

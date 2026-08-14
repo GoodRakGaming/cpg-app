@@ -35,6 +35,12 @@ Thumbs.db
 .turbo/
 dist/
 build/
+__pycache__/
+*.pyc
+
+# Tester's real-data validation script (Phase 10 Librarian) — never pushed anywhere per
+# explicit instruction, kept locally only.
+docs/PLANNING/test_librarian_real_data_round5.py
 
 # Old/historical docs — kept locally on the dev machine only, not pushed to
 # GitHub or production. Active docs live directly in docs/ (README/STATUS/

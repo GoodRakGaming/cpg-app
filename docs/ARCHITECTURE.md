@@ -28,6 +28,19 @@
 | `proposals` | title, status (draft/final/archived), template_id, user_id, current_version_id |
 | `proposal_versions` | proposal_id, version_number, `data` (JSONB), comment, changed_by, pdf_hash |
 
+**Phase 10 (`backend/migrations/002_price_catalog.sql`, `003_price_catalog_similarity_details.sql`):**
+
+| Таблица | Ключевые поля |
+|---|---|
+| `price_catalog` | source_work_name, canonical_work_name, category, unit, price, price_qualifier, source_type, status (pending_review/approved/rejected), model, `row_hash` (уникальный, дедуп на уровне БД), `raw_extraction` (JSONB) |
+| `price_catalog_audit` | price_catalog_id, changed_by, `before`/`after` (JSONB) — история ручных правок |
+
+`price_catalog.canonical_work_name`/`category` заполняются сервисом-«Библиотекарём»
+(`backend/src/services/librarianService.js`) через локальную LLM (Ollama, `devstral:24b`) при
+приёме каждой позиции — приводит вольные названия работ к единому виду, чтобы одинаковые по сути
+позиции из разных источников собирались в одну статистику цены, а не плодили дубли-синонимы.
+Подробности — [PLANNING/PHASE_10_PRICE_CATALOG_PLAN.md](PLANNING/PHASE_10_PRICE_CATALOG_PLAN.md).
+
 ---
 
 ## Backend
@@ -110,6 +123,23 @@ Base URL: `/api`. Все endpoints кроме `POST /auth/login` требуют 
 | `/pdf/generate/:proposalId` | POST | Сгенерировать/пересчитать PDF-хэш |
 | `/pdf/export/:proposalId` | POST | Экспорт с кастомными опциями (формат, поля) |
 | `/pdf/status/:proposalId` | GET | Статус кэша PDF |
+
+### Price Catalog (Phase 10)
+
+| Endpoint | Метод | Доступ | Описание |
+|---|---|---|---|
+| `/price-catalog/ingest` | POST | `X-API-Key` (`PRICE_CATALOG_INGEST_KEY`) | Приём одной позиции из любого источника; Библиотекарь категоризирует/канонизирует через LLM, `row_hash` дедуплицирует на уровне БД |
+| `/price-catalog` | GET | auth | Список позиций (`?limit&offset&search&status&category`) |
+| `/price-catalog/reference` | GET | auth | Справочник для подсказок при заполнении КП |
+| `/price-catalog/reference/sources` | GET | auth | Источники по канонической позиции |
+| `/price-catalog/:id` | PATCH | auth | Ручная правка позиции, пишет в `price_catalog_audit` |
+| `/price-catalog/rename-canonical` | POST | admin | Массовое переименование канонического названия |
+| `/price-catalog/send-to-review` | POST | admin | Пометить позиции на ревью |
+
+`ingest` — единственная точка входа для наполнения справочника независимо от источника (ручной
+ввод, n8n-пайплайн Уровня 0 — см. [PLANNING/PHASE_10B_level0_ingestion_plan.md](PLANNING/PHASE_10B_level0_ingestion_plan.md),
+будущие уровни 1/2). Реализовано и работает в проде; `ingest-runs` (таблица метрик n8n-прогонов) —
+часть плана 10B, ещё не собрана.
 
 ### Общий формат ответа
 

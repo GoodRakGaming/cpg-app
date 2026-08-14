@@ -405,6 +405,56 @@ const sendGroupToReviewSchema = Joi.object({
   unit: Joi.string().max(50).required(),
 }).unknown(false);
 
+/**
+ * Phase 10B — n8n Level 0, таблица n8n_ingest_runs.
+ * См. docs/PLANNING/PHASE_10B_level0_ingestion_plan.md, раздел «Метрики — таблица в БД».
+ */
+
+const N8N_TRIGGER_TYPES = ['webhook', 'schedule', 'manual', 'watchdog'];
+const N8N_RUN_STATUSES = [
+  'running',
+  'ingest_completed_archive_pending',
+  'completed',
+  'completed_with_errors',
+  'failed',
+  'abandoned',
+];
+
+/**
+ * Schema для POST /api/price-catalog/ingest-runs — создать запись прогона (шаг 2 workflow #1).
+ * `status` не принимается от клиента — сервер всегда создаёт со status='running' (единственный
+ * смысл создания записи, C3 — таблица держит слот на GPU).
+ */
+const createIngestRunSchema = Joi.object({
+  source_filename: Joi.string().max(500).required().messages({
+    'any.required': 'source_filename обязателен',
+  }),
+  nextcloud_file_id: Joi.string().max(64).optional().allow(null, ''),
+  trigger_type: Joi.string().valid(...N8N_TRIGGER_TYPES).required().messages({
+    'any.only': `trigger_type должен быть одним из: ${N8N_TRIGGER_TYPES.join(', ')}`,
+    'any.required': 'trigger_type обязателен',
+  }),
+  resumed_from_run_id: Joi.string().uuid().optional().allow(null),
+}).unknown(false);
+
+/**
+ * Schema для PATCH /api/price-catalog/ingest-runs/:id — heartbeat/переходы статуса
+ * (шаги 4, 8, 11-14 workflow #1; watchdog в workflow #4). Всё опционально — каждый вызов
+ * обновляет только те поля, что относятся к текущему шагу.
+ */
+const updateIngestRunSchema = Joi.object({
+  status: Joi.string().valid(...N8N_RUN_STATUSES).optional().messages({
+    'any.only': `status должен быть одним из: ${N8N_RUN_STATUSES.join(', ')}`,
+  }),
+  rows_total: Joi.number().integer().min(0).optional(),
+  rows_processed: Joi.number().integer().min(0).optional(),
+  rows_success: Joi.number().integer().min(0).optional(),
+  rows_failed: Joi.number().integer().min(0).optional(),
+  failed_rows: Joi.array().items(Joi.number().integer().min(0)).optional().allow(null),
+  error_summary: Joi.string().optional().allow(null, ''),
+  finished_at: Joi.date().iso().optional().allow(null),
+}).unknown(false);
+
 module.exports = {
   registerSchema,
   loginSchema,
@@ -421,4 +471,6 @@ module.exports = {
   updatePriceCatalogSchema,
   renameCanonicalSchema,
   sendGroupToReviewSchema,
+  createIngestRunSchema,
+  updateIngestRunSchema,
 };

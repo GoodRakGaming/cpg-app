@@ -10,6 +10,7 @@ const Proposal = require('./Proposal')(sequelize);
 const ProposalVersion = require('./ProposalVersion')(sequelize);
 const PriceCatalog = require('./PriceCatalog')(sequelize);
 const PriceCatalogAudit = require('./PriceCatalogAudit')(sequelize);
+const N8nIngestRun = require('./N8nIngestRun')(sequelize);
 
 // ============= СВЯЗИ МЕЖДУ МОДЕЛЯМИ =============
 
@@ -99,6 +100,16 @@ PriceCatalogAudit.belongsTo(User, {
   as: 'changedByUser',
 });
 
+// N8nIngestRun → N8nIngestRun (resume-цепочка, раунд 4 D1)
+N8nIngestRun.belongsTo(N8nIngestRun, {
+  foreignKey: 'resumed_from_run_id',
+  as: 'resumedFrom',
+});
+N8nIngestRun.hasMany(N8nIngestRun, {
+  foreignKey: 'resumed_from_run_id',
+  as: 'resumedBy',
+});
+
 // ============= ЭКСПОРТ =============
 
 module.exports = {
@@ -109,4 +120,5 @@ module.exports = {
   ProposalVersion,
   PriceCatalog,
   PriceCatalogAudit,
+  N8nIngestRun,
 };
