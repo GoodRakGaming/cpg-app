@@ -38,13 +38,16 @@ build/
 __pycache__/
 *.pyc
 
-# Tester's real-data validation script (Phase 10 Librarian) — never pushed anywhere per
-# explicit instruction, kept locally only.
-docs/PLANNING/test_librarian_real_data_round5.py
+# Internal planning/working docs and infra/deployment details — kept locally only, never
+# pushed to GitHub. GitHub carries only what's needed to run and continue development
+# (README/SETUP, docs/README, docs/ARCHITECTURE, docs/STATUS with infra specifics scrubbed).
+# Real deployment topology, active planning notes, external review transcripts, and n8n
+# workflow drafts all live here on disk for our own use, not in git history going forward.
+docs/PLANNING/
+docs/DEPLOYMENT.md
 
 # Old/historical docs — kept locally on the dev machine only, not pushed to
-# GitHub or production. Active docs live directly in docs/ (README/STATUS/
-# ARCHITECTURE/DEPLOYMENT) and docs/PLANNING/.
+# GitHub or production.
 docs/ARCHIVES/
 docs/BACKEND/
 docs/FRONTEND/
